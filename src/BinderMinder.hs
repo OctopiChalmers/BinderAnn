@@ -13,13 +13,16 @@ import HsSyn as GHC
 import DynFlags as GHC
 import GhcPlugins as GHC
 
+putStrLnHsc :: String -> GHC.Hsc ()
+putStrLnHsc = liftIO . putStrLn
+
 (@@) :: a -> b -> b
 (@@) _ = trace "*** warning: you are using @@ but the plugin is not enabled!"
 
 infix 2 @@
 
 ann_tok_name :: GHC.RdrName
-ann_tok_name = GHC.mkUnqual Name.varName (GHC.mkFastString "|$|")
+ann_tok_name = GHC.mkUnqual Name.varName (GHC.mkFastString "@@")
 
 plugin :: GHC.Plugin
 plugin = GHC.defaultPlugin { GHC.parsedResultAction = binderMinder }
@@ -43,13 +46,17 @@ findAndAnnotate :: (p ~ GHC.GhcPs)
                 -> GHC.Hsc (GHC.HsExpr p)
 findAndAnnotate flags = \case
     GHC.OpApp _
-      (L _ (HsVar _   (L _ ann_fun)))
+      (L l (HsVar _   (L _ ann_fun)))
       (L _ (HsVar _   (L _ ann_tok)))
       (L _ (HsDo  x y (L z doStmts)))
       | showPpr flags ann_tok ==
         showPpr flags ann_tok_name -> do
 
+          putStrLnHsc $ "=================="
+          putStrLnHsc $ "found instrumented do at: " ++ showPpr flags l
           doStmts' <- everywhereM (mkM (annotate flags ann_fun)) doStmts
+          putStrLnHsc $ "=================="
+
           return (HsDo x y (L z doStmts'))
 
     expr -> return expr
@@ -63,7 +70,7 @@ annotate :: (p ~ GHC.GhcPs)
 annotate flags ann_fun = \case
 
   -- Only annotate if the statement represents a bind operation
-  BindStmt x pat@(L _ (VarPat _ (L _ bindName))) body y z -> do
+  stmt@(BindStmt x pat@(L _ (VarPat _ (L _ bindName))) body y z) -> do
 
     let bindName' = showPpr flags bindName
 
@@ -79,12 +86,14 @@ annotate flags ann_fun = \case
 
     let stmt' = BindStmt x pat body' y z
 
+    putStrLnHsc $ "------------------"
+    putStrLnHsc $ "*** original:\n" ++ showPpr flags stmt
+    putStrLnHsc $ "*** transformed:\n" ++ showPpr flags stmt'
+
     return stmt'
 
   -- Everything that is not a bind is left unchanged
   stmt -> return stmt
-
-
 
 
     -- liftIO $ do
