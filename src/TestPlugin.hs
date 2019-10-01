@@ -7,10 +7,8 @@ import BinderMinder
 tag :: String -> IO a -> IO a
 tag s io = putStrLn ("running IO " ++ show s) >> io
 
-node = tag
-
 main :: IO ()
-main = node @@ do
+main = tag @@ do
   x <- pure (3 :: Int)
   y <- return 5
   print (x + y)

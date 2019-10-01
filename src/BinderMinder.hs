@@ -6,14 +6,17 @@
 module BinderMinder (plugin, (@@)) where
 
 import Data.Generics (mkM, everywhereM)
+import Control.Monad
 
-import FastString as FastString
-import OccName as Name
-import HsSyn as GHC
-import DynFlags as GHC
+import FastString as FS
+import OccName    as Name
+import HsSyn      as GHC
+import Module     as GHC
+import DynFlags   as GHC
 import GhcPlugins as GHC
 
-putStrLnHsc :: String -> GHC.Hsc ()
+
+putStrLnHsc :: String -> Hsc ()
 putStrLnHsc = liftIO . putStrLn
 
 (@@) :: a -> b -> b
@@ -21,56 +24,57 @@ putStrLnHsc = liftIO . putStrLn
 
 infix 2 @@
 
-ann_tok_name :: GHC.RdrName
-ann_tok_name = GHC.mkUnqual Name.varName (GHC.mkFastString "@@")
+ann_tok_name :: RdrName
+ann_tok_name = mkUnqual Name.varName (mkFastString "@@")
 
-plugin :: GHC.Plugin
-plugin = GHC.defaultPlugin { GHC.parsedResultAction = binderMinder }
-
-binderMinder :: [GHC.CommandLineOption]
-             -> GHC.ModSummary
-             -> GHC.HsParsedModule
-             -> GHC.Hsc GHC.HsParsedModule
-binderMinder _opts _summary parsed = do
-
-  flags <- GHC.getDynFlags
-  let L loc hsMod = GHC.hpm_module parsed
-
-  hsMod' <- everywhereM (mkM (findAndAnnotate flags)) hsMod
-  return parsed { GHC.hpm_module = L loc hsMod' }
+plugin :: Plugin
+plugin = defaultPlugin { parsedResultAction = \_opts _summary -> binderMinder }
 
 
-findAndAnnotate :: (p ~ GHC.GhcPs)
-                => GHC.DynFlags
-                -> GHC.HsExpr p
-                -> GHC.Hsc (GHC.HsExpr p)
-findAndAnnotate flags = \case
-    GHC.OpApp _
+binderMinder :: HsParsedModule -> Hsc HsParsedModule
+binderMinder parsed = do
+
+  flags <- getDynFlags
+  let L loc hsMod = hpm_module parsed
+
+  hsMod' <- removeImport flags =<< everywhereM (mkM (annotateDo flags)) hsMod
+  return parsed { hpm_module = L loc hsMod' }
+
+
+removeImport :: DynFlags -> HsModule GhcPs -> Hsc (HsModule GhcPs)
+removeImport flags hsMod = do
+  let isPlugin = \case
+        (L l (ImportDecl { ideclName = L _ importName }))
+          | importName == mkModuleName "BinderMinder" -> do
+              putStrLnHsc $ "*** removing plugin import from: " ++ showPpr flags l
+              return False
+        _ -> return True
+
+  imports <- filterM isPlugin (hsmodImports hsMod)
+  return hsMod { hsmodImports = imports }
+
+
+annotateDo :: DynFlags -> HsExpr GhcPs -> Hsc (HsExpr GhcPs)
+annotateDo flags = \case
+    OpApp _
       (L l (HsVar _   (L _ ann_fun)))
       (L _ (HsVar _   (L _ ann_tok)))
       (L _ (HsDo  x y (L z doStmts)))
-      | showPpr flags ann_tok ==
-        showPpr flags ann_tok_name -> do
+      | showPpr flags ann_tok == showPpr flags ann_tok_name -> do
 
-          putStrLnHsc $ "=================="
-          putStrLnHsc $ "found instrumented do at: " ++ showPpr flags l
-          doStmts' <- everywhereM (mkM (annotate flags ann_fun)) doStmts
-          putStrLnHsc $ "=================="
+          putStrLnHsc $ "*** instrumenting do expression at " ++ showPpr flags l
+          doStmts' <- everywhereM (mkM (annotateBind flags ann_fun)) doStmts
 
           return (HsDo x y (L z doStmts'))
 
     expr -> return expr
 
 
-annotate :: (p ~ GHC.GhcPs)
-         => GHC.DynFlags
-         -> GHC.RdrName
-         -> GHC.ExprStmt GHC.GhcPs
-         -> GHC.Hsc (GHC.ExprStmt GHC.GhcPs)
-annotate flags ann_fun = \case
+annotateBind :: DynFlags -> RdrName -> ExprStmt GhcPs -> Hsc (ExprStmt GhcPs)
+annotateBind flags ann_fun = \case
 
-  -- Only annotate if the statement represents a bind operation
-  stmt@(BindStmt x pat@(L _ (VarPat _ (L _ bindName))) body y z) -> do
+  -- Only annotateBind if the statement represents a bind operation
+  BindStmt x pat@(L _ (VarPat _ (L _ bindName))) body y z -> do
 
     let bindName' = showPpr flags bindName
 
@@ -81,20 +85,31 @@ annotate flags ann_fun = \case
                 (noLoc ann_fun)))
               (noLoc (HsLit noExt
                 (HsString NoSourceText
-                  (FastString.fsLit bindName'))))))
+                  (fsLit bindName'))))))
             (noLoc (HsPar noExt body)))
 
     let stmt' = BindStmt x pat body' y z
 
-    putStrLnHsc $ "------------------"
-    putStrLnHsc $ "*** original:\n" ++ showPpr flags stmt
-    putStrLnHsc $ "*** transformed:\n" ++ showPpr flags stmt'
 
     return stmt'
 
   -- Everything that is not a bind is left unchanged
   stmt -> return stmt
 
+
+
+
+
+
+
+
+
+
+
+
+
+    -- putStrLnHsc $ "*** original:\n" ++ showPpr flags stmt
+    -- putStrLnHsc $ "*** transformed:\n" ++ showPpr flags stmt'
 
     -- liftIO $ do
     --   putStrLn $ "=================="
