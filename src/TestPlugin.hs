@@ -8,23 +8,26 @@ module TestPlugin where
 
 import BinderMinder
 
-tag :: String -> IO a -> IO a
-tag s io = putStrLn ("tagging " ++ show s) >> io
+tag :: Maybe BindName -> Maybe Loc -> IO a -> IO a
+tag nm loc io = putStrLn ("evaluating node (" ++ show nm ++ ") at (" ++ show loc ++ ")") >> io
 
-main :: IO ()
+main :: IO Int
 main = tag |$| do
-  nachi <- pure (3 :: Int)
+  nachi <- pure 3
   matthi <- return 5
   foo False
   print (matthi + nachi)
+  return nachi
 
 {-# ANN foo "tag" #-}
-foo :: Bool -> IO ()
+foo :: Bool -> IO Int
 foo True = do
-  a <- pure (3 :: Int)
+  a <- pure 3
   b <- return 5
   print (a + b)
+  return a
 foo False = do
   (x, y) <- return ("hey", "ho")
   b <- return 5
   print (show b ++ " " ++ x)
+  return b
