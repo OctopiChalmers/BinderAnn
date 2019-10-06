@@ -1,15 +1,16 @@
-{-#
-  OPTIONS_GHC
-  -fplugin     BinderMinder
-  -fplugin-opt BinderMinder:|$|
+{-# OPTIONS_GHC
+-fplugin     BinderMinder
+-fplugin-opt BinderMinder:|$|
 #-}
 
 module TestPlugin where
 
 import BinderMinder
 
-tag :: Maybe BindName -> Maybe Loc -> IO a -> IO a
-tag nm loc io = putStrLn ("evaluating node (" ++ show nm ++ ") at (" ++ show loc ++ ")") >> io
+tag :: Maybe Name -> Maybe Loc -> IO a -> IO a
+tag nm loc io = do
+  putStrLn $ "evaluating node (" ++ show nm ++ ") at (" ++ show loc ++ ")"
+  io
 
 main :: IO Int
 main = tag |$| do

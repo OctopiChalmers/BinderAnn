@@ -1,7 +1,11 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE PatternSynonyms #-}
+
 module BinderMinder
-  ( BindName, Loc
+  ( BinderMinder.Name
+  , BinderMinder.Loc
   , plugin
   , (@@)
   , __BinderMinder_Just__
@@ -21,49 +25,57 @@ import HsSyn      as GHC
 import DynFlags   as GHC
 import GhcPlugins as GHC
 
-type BindName = String
-type Loc      = (FilePath, Int, Int) -- file, line and column
+type Name = String
+type Loc  = (FilePath, Int, Int) -- file, line and column
 
 type Anns = [(RdrName, RdrName)]
 
+----------------------------------------
+-- The plugin itself
+--
+
 plugin :: Plugin
 plugin = defaultPlugin { parsedResultAction = \opts _summ -> binderMinder opts }
+  where
+    binderMinder opts parsed = do
+      message $ "starting plugin"
 
-binderMinder :: [CommandLineOption] -> HsParsedModule -> Hsc HsParsedModule
-binderMinder opts parsed = do
-  putStrLnHsc $ "[!] starting BinderMinder plugin"
+      flags <- getDynFlags
+      let L loc hsMod = hpm_module parsed
 
-  flags <- getDynFlags
-  let L loc hsMod = hpm_module parsed
+      -- create an annotation token based on the plugin options (@@ by default)
+      let ann_tok = case opts of [sym] -> mkRdrName sym; _ -> mkRdrName "@@"
 
-  -- create an annotation token based on the plugin cli options (@@ by default)
-  let ann_tok = case opts of [sym] -> mkRdrName sym; _ -> mkRdrName "@@"
+      -- extract all the annotation pragmas from the code
+      let anns = extractAnn <$> listify isAnn hsMod
 
-  -- extract all the annotation pragmas from the code
-  let anns = extractAnn <$> listify isAnn hsMod
+      let transform = everywhereM (mkM (annotateTokens       flags ann_tok))
+                  >=> everywhereM (mkM (annotateTopLevelAnns flags anns))
 
-  let transform = everywhereM (mkM (annotateTokenAnnDo flags ann_tok))
-             >=> everywhereM (mkM (annotateTopLevelAnnDo flags anns))
+      hsMod' <- transform hsMod
 
-  hsMod' <- transform hsMod
-  return parsed { hpm_module = L loc hsMod' }
+      message $ "[!] done"
+      return parsed { hpm_module = L loc hsMod' }
 
 
+----------------------------------------
 -- | Search for top-level bindings of the shape:
 -- foo = do ...
--- where foo has an ANN annotation
-annotateTopLevelAnnDo :: DynFlags -> Anns -> Match GhcPs (LHsExpr GhcPs)
-               -> Hsc (Match GhcPs (LHsExpr GhcPs))
-annotateTopLevelAnnDo flags anns = \case
+-- where foo has an ANN annotation somewhere in the code
+
+annotateTopLevelAnns :: DynFlags -> Anns -> Match GhcPs (LHsExpr GhcPs)
+                     -> Hsc (Match GhcPs (LHsExpr GhcPs))
+annotateTopLevelAnns flags anns = \case
+
   -- annotate match statements that appear in the module annotations
   Match m_x m_ctx m_ps
     (GRHSs grhss_x
       [L l (GRHS grhs_x grhs_guards
              (L l' (HsDo do_x do_cxt (L l'' doStmts))))] lbs)
     | Just ann_fun <- lookup (unLoc (mc_fun m_ctx)) anns -> do
-        putStrLnHsc $ "[!] annotating do expression at " ++ showPpr flags l
+        message $ "annotating do expression at " ++ showPpr flags l
 
-        doStmts' <- mapM (annotateBind flags ann_fun) doStmts
+        doStmts' <- mapM (annotateDoStmt flags ann_fun) doStmts
         return (Match m_x m_ctx m_ps
                  (GRHSs grhss_x
                    [L l (GRHS grhs_x grhs_guards
@@ -72,182 +84,184 @@ annotateTopLevelAnnDo flags anns = \case
   -- otherwise, just return the match unchanged
   match -> return match
 
+----------------------------------------
 -- | Search for annotated do expressions of the shape:
 -- `foo = ann_fun <ann_tok> do ...`
-annotateTokenAnnDo :: DynFlags -> RdrName -> HsExpr GhcPs -> Hsc (HsExpr GhcPs)
-annotateTokenAnnDo flags ann_tok = \case
-  -- annotate do expression prefixed with the annotation token
-  OpApp _
-    (L l (HsVar _   (L _ ann_fun)))
-    (L _ (HsVar _   (L _ tok)))
-    (L _ (HsDo  x y (L z doStmts)))
-    | showPpr flags tok == showPpr flags ann_tok -> do
-        putStrLnHsc $ "[!] annotating do expression at " ++ showPpr flags l
 
-        doStmts' <- mapM (annotateBind flags ann_fun) doStmts
-        return (HsDo x y (L z doStmts'))
+annotateTokens :: DynFlags -> RdrName -> LHsExpr GhcPs -> Hsc (LHsExpr GhcPs)
+annotateTokens flags ann_tok = \case
+  -- annotate do expression prefixed with the annotation token
+  L l (OpApp _
+        (L _ (HsVar _   (L _ ann_fun)))
+        (L _ (HsVar _   (L _ tok)))
+        (L _ (HsDo  _ y (L z doStmts))))
+    | showPpr flags tok == showPpr flags ann_tok -> do
+        message $ "annotating do expression at " ++ showPpr flags l
+
+        doStmts' <- mapM (annotateDoStmt flags ann_fun) doStmts
+        return (L l (HsDo noExt y (L z doStmts')))
 
   -- otherwise, just return the expression unchanged
   expr -> return expr
 
 
-annotateBind :: DynFlags -> RdrName -> ExprLStmt GhcPs -> Hsc (ExprLStmt GhcPs)
-annotateBind flags ann_fun = \case
+----------------------------------------
+-- | Annotate a do statement
 
-  ----------------------------------------
+annotateDoStmt :: DynFlags -> RdrName -> ExprLStmt GhcPs -> Hsc (ExprLStmt GhcPs)
+annotateDoStmt flags ann_fun = \case
+
   -- Bind statements where the lhs is a variable pattern
-  (L l (BindStmt x pat@(L _ (VarPat _ (L _ bindName))) body y z)) -> do
-    putStrLnHsc $ "[+] annotating single bind \""++ showPpr flags bindName
-               ++ "\" at " ++ showPpr flags l
+  L l (BindStmt x pat@(L _ (VarPat _ (L _ bind))) body y z) -> do
 
-    let bindStr = varPatToStringLit flags pat
-    let body' = noLoc $ HsApp noExt
-                (noLoc $ HsApp noExt
-                  (noLoc $ HsApp noExt
-                    (noLoc $ HsVar noExt (noLoc ann_fun))
-                    (noLoc $ HsPar noExt
-                      (noLoc $ HsApp noExt
-                        (noLoc $ HsVar noExt $ noLoc $
-                          mkRdrName "__BinderMinder_Just__")
-                        (noLoc $ HsLit noExt $ bindStr))))
-                  (noLoc $ mkSrcSpanExpr l))
-                (noLoc $ HsPar noExt body)
+    let body' =
+          var ann_fun
+          `app` paren (var pluginJust `app` varPatToLitStr flags pat)
+          `app` paren (mkLocExpr l)
+          `app` paren body
 
+    message $ "  found single bind ("++ pretty bind ++ ") at " ++ pretty l
     return (L l (BindStmt x pat body' y z))
 
-  ----------------------------------------
   -- Bind statements where the lhs is a tuple pattern
-  (L l (BindStmt x pat@(L _ (TuplePat _ binds _)) body y z))
-    | length binds > 1 &&
-      length binds <= 5 &&
-      all isVarPat binds -> do
-    putStrLnHsc $ "[+] annotating tuple bind \""++ showPpr flags pat
-               ++ "\" at " ++ showPpr flags l
+  L l (BindStmt x pat@(L _ (TuplePat _ binds _)) body y z)
+    | length binds > 1 && length binds <= 5 && all isVarPat binds -> do
 
-    let bindStrs = varPatToStringLit flags <$> binds
-    let annTup = mkAnnTuple ann_fun l bindStrs
-    let lifter = mkRdrName ("__BinderMinder_lift_tuple_"++ show (length binds) ++"__")
+        let body' =
+              var (pluginLifter (length binds))
+              `app` mkAnnTuple ann_fun l (varPatToLitStr flags <$> binds)
+              `app` paren body
 
-    -- let bindStr = HsString NoSourceText (fsLit (showPpr flags bindName))
-    let body' = noLoc $ HsApp noExt
-                (noLoc $ HsApp noExt
-                  (noLoc $ HsVar noExt (noLoc lifter))
-                  (noLoc annTup))
-                (noLoc $ HsPar noExt body)
+        message $ "  found tuple bind ("++ pretty pat ++ ") at " ++ pretty l
+        return (L l (BindStmt x pat body' y z))
 
-    return (L l (BindStmt x pat body' y z))
-
-  ----------------------------------------
   -- Body statements
-  (L l (BodyStmt x body y z)) -> do
-    putStrLnHsc $ "[+] annotating body statement at " ++ showPpr flags l
+  L l (BodyStmt x body y z) -> do
 
-    let body' = noLoc $ HsApp noExt
-                (noLoc $ HsApp noExt
-                  (noLoc $ HsApp noExt
-                    (noLoc $ HsVar noExt $ noLoc ann_fun)
-                    (noLoc $ HsVar noExt $ noLoc $ mkRdrName "__BinderMinder_Nothing__"))
-                  (noLoc $ mkSrcSpanExpr l))
-                (noLoc $ HsPar noExt body)
+    let body' =
+          var ann_fun
+          `app` var pluginNothing
+          `app` paren (mkLocExpr l)
+          `app` paren body
 
+    message $ "  found body statement at " ++ pretty l
     return (L l (BodyStmt x body' y z))
 
-  -- Everything that is not a bind is left unchanged
+  -- Everything else is left unchanged
   stmt -> return stmt
 
-
+  where
+    pretty :: forall a. Outputable a => a -> String
+    pretty = showPpr flags
 
 
 ----------------------------------------
 -- | Helper functions
 
-putStrLnHsc :: String -> Hsc ()
-putStrLnHsc = liftIO . putStrLn
+-- | Located expressions builder interface
+app :: LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
+app x y = noLoc (HsApp noExt x y)
 
+paren :: LHsExpr GhcPs -> LHsExpr GhcPs
+paren x = noLoc (HsPar noExt x)
+
+var :: RdrName -> LHsExpr GhcPs
+var x = noLoc (HsVar noExt (noLoc x))
+
+numLit :: Int -> LHsExpr GhcPs
+numLit n = noLoc (HsLit noExt (HsInt noExt (mkIntegralLit n)))
+
+strLit :: FastString -> LHsExpr GhcPs
+strLit s = noLoc (HsLit noExt (HsString NoSourceText s))
+
+tuple :: [LHsExpr GhcPs] -> LHsExpr GhcPs
+tuple exprs = noLoc (ExplicitTuple noExt (noLoc . Present noExt <$> exprs) Boxed)
+
+
+-- | Exported names
+pluginJust :: RdrName
+pluginJust = mkRdrName "__BinderMinder_Just__"
+
+pluginNothing :: RdrName
+pluginNothing = mkRdrName "__BinderMinder_Nothing__"
+
+pluginLifter :: Int -> RdrName
+pluginLifter n = mkRdrName $ "__BinderMinder_lift_tuple_"++ show n ++"__"
+
+
+-- | Create a name from a string
 mkRdrName :: String -> RdrName
 mkRdrName = mkUnqual Name.varName . mkFastString
 
+
+-- | Transform a variable pattern into its corresponding string expression
+varPatToLitStr :: DynFlags -> LPat GhcPs -> LHsExpr GhcPs
+varPatToLitStr flags (L _ (VarPat _ name)) = strLit (fsLit (showPpr flags name))
+varPatToLitStr _     _                     = error "this should not happen"
+
+-- | Create a tuple of the shape:
+-- (ann_fun name1 loc, ann_fun name2, ...)
+mkAnnTuple :: RdrName -> SrcSpan -> [LHsExpr GhcPs] -> LHsExpr GhcPs
+mkAnnTuple ann_fun loc bindStrs =
+  tuple (mkElem <$> bindStrs)
+  where mkElem bindStrLit =
+          var ann_fun
+          `app` paren (var pluginJust `app` bindStrLit)
+          `app` paren (mkLocExpr loc)
+
+-- | Create a Loc tuple from a SrcSpan
+mkLocExpr :: SrcSpan -> LHsExpr GhcPs
+mkLocExpr (UnhelpfulSpan {}) =
+  var pluginNothing
+mkLocExpr (RealSrcSpan loc) =
+  var pluginJust
+  `app` tuple [ strLit (srcSpanFile loc)
+              , numLit (srcSpanStartLine loc)
+              , numLit (srcSpanStartCol loc) ]
+
+-- | Is this pattern a variable?
+isVarPat :: LPat GhcPs -> Bool
+isVarPat (L _ (VarPat {})) = True
+isVarPat _                 =  False
+
 -- | Check whether an annotation pragma is of the shape:
 -- | {-# ANN ident "str" #-}
+
+pattern Ann :: RdrName -> FastString -> AnnDecl GhcPs
+pattern Ann target ann_fun <-
+  HsAnnotation _ _
+  (ValueAnnProvenance (L _ target))
+  (L _ (HsLit _ (HsString _ ann_fun)))
+
 isAnn :: AnnDecl GhcPs -> Bool
-isAnn = \case
-  (HsAnnotation _ _
-    (ValueAnnProvenance (L _ _))
-    (L _ (HsLit _ (HsString _ _)))) -> True
-  _                                 -> False
+isAnn (Ann {}) = True
+isAnn _        = False
 
 extractAnn :: AnnDecl GhcPs -> (RdrName, RdrName)
-extractAnn = \case
-  (HsAnnotation _ _
-    (ValueAnnProvenance (L _ target_fun))
-    (L _ (HsLit _ (HsString _ ann_fun)))) -> (target_fun, mkVarUnqual ann_fun)
-  _                                       -> error "this should not happen"
+extractAnn (Ann target ann_fun) = (target, mkVarUnqual ann_fun)
+extractAnn _                    =  error "this should not happen"
 
-isVarPat :: LPat GhcPs -> Bool
-isVarPat = \case
-  (L _ (VarPat {})) -> True
-  _                 -> False
-
-varPatToStringLit :: DynFlags -> LPat GhcPs -> HsLit GhcPs
-varPatToStringLit flags = \case
-  (L _ (VarPat _ (L _ bindName))) ->
-    HsString NoSourceText (fsLit (showPpr flags bindName))
-  _ -> error "this should not happen"
-
-mkAnnTuple :: RdrName -> SrcSpan -> [HsLit GhcPs] -> HsExpr GhcPs
-mkAnnTuple ann_fun loc bindStrs =
-  ExplicitTuple noExt (mkLHsTupArg <$> bindStrs) Boxed
-  where
-    mkLHsTupArg bindStr =
-      noLoc $ Present noExt $
-        noLoc $ HsApp noExt
-          (noLoc $ HsApp noExt
-            (noLoc $ HsVar noExt $ noLoc ann_fun)
-            (noLoc $ HsPar noExt
-              (noLoc $ HsApp noExt
-                (noLoc $ HsVar noExt $ noLoc $
-                  mkRdrName "__BinderMinder_Just__")
-                (noLoc $ HsLit noExt $ bindStr))))
-            (noLoc $ mkSrcSpanExpr loc)
-
-mkNumLit :: Int -> HsExpr GhcPs
-mkNumLit n = HsLit noExt (HsInt noExt (mkIntegralLit n))
-
-mkStrLit :: FastString -> HsExpr GhcPs
-mkStrLit s = HsLit noExt (HsString NoSourceText s)
-
-mkSrcSpanExpr :: SrcSpan -> HsExpr GhcPs
-mkSrcSpanExpr (RealSrcSpan loc) =
-  HsPar noExt $ noLoc $
-    HsApp noExt
-      (noLoc $ HsVar noExt $ noLoc $
-        mkRdrName "__BinderMinder_Just__")
-      (noLoc $ ExplicitTuple noExt tuple Boxed)
-  where tuple = [ noLoc $ Present noExt $ noLoc (mkStrLit (srcSpanFile loc))
-                , noLoc $ Present noExt $ noLoc (mkNumLit (srcSpanStartLine loc))
-                , noLoc $ Present noExt $ noLoc (mkNumLit (srcSpanStartCol loc))
-                ]
-mkSrcSpanExpr (UnhelpfulSpan {}) =
-  HsVar noExt $ noLoc $ mkRdrName "__BinderMinder_Nothing__"
-
+-- | Print a message to the console
+message :: String -> Hsc ()
+message str = liftIO $ putStrLn $ "[BinderMinder] " ++ str
 
 ----------------------------------------
+-- | Exported functions
+
 -- | Make the default annotation token an actual function.
 -- This way we can at least raise a warning or something
-
 (@@) :: a -> b -> b
 (@@) _ = trace "*** warning: you are using @@ but the plugin is not enabled!"
 infix 2 @@
 
-----------------------------------------
--- | Lift tuple returning operations
-
+-- | Wrap Nothing and Just under a reasonably unique variable name
 __BinderMinder_Nothing__ :: Maybe a
 __BinderMinder_Nothing__ = Nothing
 
 __BinderMinder_Just__ :: a -> Maybe a
 __BinderMinder_Just__ = Just
 
+-- | Lift annotation functions to monadic values returning tuples
 __BinderMinder_lift_tuple_2__
   :: Monad m
   => (m a -> m a', m b -> m b')
@@ -297,14 +311,3 @@ __BinderMinder_lift_tuple_5__ (fa, fb, fc, fd, fe) m = do
   d' <- fd (return d)
   e' <- fe (return e)
   return (a', b', c', d', e')
-
-
--- removeImport :: DynFlags -> HsModule GhcPs -> Hsc (HsModule GhcPs)
--- removeImport flags hsMod = do
---   imports <- flip filterM (hsmodImports hsMod) $ \case
---     (L l (ImportDecl { ideclName = L _ importName }))
---       | importName == mkModuleName "BinderMinder" -> do
---           putStrLnHsc $ "[!] removing plugin import from: " ++ showPpr flags l
---           return False
---     _ -> return True
---   return hsMod { hsmodImports = imports }
