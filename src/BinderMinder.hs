@@ -1,6 +1,6 @@
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE RankNTypes      #-}
+{-# LANGUAGE LambdaCase      #-}
+{-# LANGUAGE TypeFamilies    #-}
 {-# LANGUAGE PatternSynonyms #-}
 
 module BinderMinder
