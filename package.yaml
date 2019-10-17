@@ -1,6 +1,6 @@
-name:                BinderMinder
+name:                Peekaboo
 version:             0.1.0.0
-github:              "agustinmista/BinderMinder"
+github:              "agustinmista/Peekaboo"
 license:             BSD3
 author:              "Agustín Mista"
 maintainer:          "mista@chalmers.se"
@@ -15,9 +15,9 @@ copyright:           "2019 Agustín Mista"
 # common to point users to the README.md file.
 
 description:         
-  Please see the README on GitHub at <https://github.com/agustinmista/BinderMinder#readme>
+  Please see the README on GitHub at <https://github.com/agustinmista/Peekaboo#readme>
 
-ghc-options: -Wall
+ghc-options: -Wall -O2
 
 extra-source-files:
 - README.md
@@ -26,9 +26,34 @@ extra-source-files:
 dependencies:
 - base >= 4.7 && < 5
 - ghc
+- ghc-prim
+- containers
 - syb
+- mtl
+- transformers
 
 library:
-  source-dirs: src
+  source-dirs: 
+  - src
   exposed-modules: 
-    - BinderMinder
+  - Peekaboo.Pure
+  - Peekaboo.Monadic
+  - Peekaboo.Transformer
+  
+  - Data.Annotated
+  - Data.Annotated.Monadic
+
+  - Control.Monad.Annotated
+  - Control.Monad.Annotated.Class
+  - Control.Monad.Annotated.Safe
+  - Control.Monad.Annotated.Unsafe
+  - System.Mem.StableMap
+
+
+tests:
+  test-plugin:
+    dependencies: Peekaboo 
+    source-dirs:  test
+    main:         Main.hs
+
+

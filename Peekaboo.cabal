@@ -1,0 +1,78 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.31.2.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 10328fb7c584f5d125dfbd7d3fa9d906ae07e1dcb4576076f9c0f5922cdb7854
+
+name:           Peekaboo
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/agustinmista/Peekaboo#readme>
+homepage:       https://github.com/agustinmista/Peekaboo#readme
+bug-reports:    https://github.com/agustinmista/Peekaboo/issues
+author:         Agustín Mista
+maintainer:     mista@chalmers.se
+copyright:      2019 Agustín Mista
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    ChangeLog.md
+
+source-repository head
+  type: git
+  location: https://github.com/agustinmista/Peekaboo
+
+library
+  exposed-modules:
+      Peekaboo.Pure
+      Peekaboo.Monadic
+      Peekaboo.Transformer
+      Data.Annotated
+      Data.Annotated.Monadic
+      Control.Monad.Annotated
+      Control.Monad.Annotated.Class
+      Control.Monad.Annotated.Safe
+      Control.Monad.Annotated.Unsafe
+      System.Mem.StableMap
+  other-modules:
+      Peekaboo.Common
+      Peekaboo.SrcInfo
+      Peekaboo.Wrapped
+      Paths_Peekaboo
+  hs-source-dirs:
+      src
+  ghc-options: -Wall -O2
+  build-depends:
+      base >=4.7 && <5
+    , containers
+    , ghc
+    , ghc-prim
+    , mtl
+    , syb
+    , transformers
+  default-language: Haskell2010
+
+test-suite test-plugin
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Monadic
+      Pure
+      Transformer
+      Paths_Peekaboo
+  hs-source-dirs:
+      test
+  ghc-options: -Wall -O2
+  build-depends:
+      Peekaboo
+    , base >=4.7 && <5
+    , containers
+    , ghc
+    , ghc-prim
+    , mtl
+    , syb
+    , transformers
+  default-language: Haskell2010

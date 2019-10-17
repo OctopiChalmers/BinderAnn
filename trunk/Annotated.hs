@@ -1,3 +1,4 @@
+{-# LANGUAGE UndecidableInstances       #-}
 {-# LANGUAGE BangPatterns               #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE ExistentialQuantification  #-}
@@ -20,13 +21,14 @@ import Control.Monad.State
 import System.Mem.StableName
 import Unsafe.Coerce
 import System.IO.Unsafe
+import GHC.Types (Any)
 
 ----------------------------------------
 -- Dynamic stable names
 
 -- WARNING: this is as unsafe as it gets, though it seems to work ¯\_(ツ)_/¯
 
-data DynamicStableName = forall a. DynamicStableName (StableName a)
+newtype DynamicStableName = DynamicStableName (StableName Any)
 
 wrapStableName :: StableName a -> DynamicStableName
 wrapStableName s = DynamicStableName (unsafeCoerce s)
@@ -101,6 +103,8 @@ instance Monad m => MonadAnnotated (AnnotatedT ann m) where
   createAnn !a ann = get >>= put . insert a ann
   lookupAnn !a     = get >>= return . lookup a
 
+instance MonadState s m => MonadState s (AnnotatedT ann m) where
+
 
 ----------------------------------------
 -- A lil test
@@ -117,7 +121,8 @@ type SrcInfo = (Maybe Name, Maybe Loc)
 
 test :: IO () ^#SrcInfo
 test = do
-  x1 <- return False   `withAnn` (Just "x1", Just ("this_file", 102, 2))
+
+  x1 <- id (return False)   `withAnn` (Just "x1", Just ("this_file", 102, 2))
   y1 <- return Nothing `withAnn` (Just "y1", Just ("this_file", 103, 2))
 
   void (pure (Just x1 <|> y1)) `withAnn` (Nothing, Just ("this_file", 105, 2))
@@ -158,5 +163,6 @@ main = do
   x <- runAnnotatedT test
   print x
 
+  putStrLn "\n================"
   let Identity y = runAnnotatedT test2
   print y
