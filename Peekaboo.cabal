@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 10328fb7c584f5d125dfbd7d3fa9d906ae07e1dcb4576076f9c0f5922cdb7854
+-- hash: bcaa8fe83577cd7f2fdfdd36520c0a719c958dcaae4560f2826b32d07c04edb5
 
 name:           Peekaboo
 version:        0.1.0.0
@@ -60,6 +60,7 @@ test-suite test-plugin
   main-is: Main.hs
   other-modules:
       Monadic
+      Prop
       Pure
       Transformer
       Paths_Peekaboo
