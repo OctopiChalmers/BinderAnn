@@ -22,14 +22,14 @@ __Peekaboo_SrcInfo__ = MkSrcInfo
 
 -- Data.Annotated.annotateM
 __Peekaboo_Data_Annotated_annotateM__
-  :: (Monad m, Pure.Annotated ann a)
-  => ann -> m a -> m a
+  :: (Monad m, Pure.Annotated SrcInfo a)
+  => SrcInfo -> m a -> m a
 __Peekaboo_Data_Annotated_annotateM__ =
   Pure.annotateM
 
 -- Data.Annotated.Monadic.annotateM
 __Peekaboo_Data_Annotated_Monadic_annotateM__
-  :: Transformer.MonadAnnotated SrcInfo m
+  :: Monadic.Annotated SrcInfo m a
   => SrcInfo -> m a -> m a
 __Peekaboo_Data_Annotated_Monadic_annotateM__ =
   Monadic.annotateM
