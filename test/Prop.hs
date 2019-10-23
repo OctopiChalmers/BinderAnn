@@ -1,6 +1,17 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# OPTIONS_GHC -fno-warn-unused-imports #-}
 {-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
+{-# OPTIONS_GHC -fno-warn-unused-matches #-}
+
+{-# OPTIONS_GHC
+  -fplugin     Peekaboo.Monadic
+  -fplugin-opt Peekaboo.Monadic::=
+#-}
+
 module Prop where
 
 import Data.Map (Map)
@@ -13,14 +24,21 @@ import Control.Monad.Except
 import Control.Monad.State
 import Control.Monad.Identity
 
+import Peekaboo.Monadic
+import Data.Annotated.Monadic
+
 
 -- | Identifiers
-newtype Id = Id { unId :: Int }
+newtype Var = MkVar { unVar :: Int }
   deriving (Show, Eq, Ord)
+
+newtype Hyp = MkHyp { unHyp :: Int }
+  deriving (Show, Eq, Ord)
+
 
 -- | Propositional values
 data Prop =
-     Var Id
+     Var Var
    | Neg Prop
    | And Prop Prop
    | Or  Prop Prop
@@ -53,27 +71,30 @@ infix 4 <=>
 type Goal = Prop
 
 data ProofState = ProofState
-  { ps_variables :: Set Id
-  , ps_assumptions :: Map Id Prop
+  { ps_variables :: Set Var
+  , ps_assumptions :: Map Hyp Prop
   , ps_goal :: Goal
   , ps_subgoals :: [Goal]
   , ps_uniq :: Int
+  , ps_ann_vars :: Map Var SrcInfo
+  , ps_ann_hyps :: Map Hyp SrcInfo
+  , ps_ann_last :: Maybe SrcInfo
   } deriving Show
 
 emptyProofState :: ProofState
-emptyProofState = ProofState Set.empty Map.empty TRUE [] 0
+emptyProofState = ProofState Set.empty Map.empty TRUE [] 0 Map.empty Map.empty Nothing
 
 newVar :: ProofState -> (Prop, ProofState)
 newVar ps =
-  (Var (Id (ps_uniq ps)),
+  (Var (MkVar (ps_uniq ps)),
    ps { ps_uniq = ps_uniq ps + 1
-      , ps_variables = Set.insert (Id (ps_uniq ps)) (ps_variables ps) })
+      , ps_variables = Set.insert (MkVar (ps_uniq ps)) (ps_variables ps) })
 
-newAssumption :: Prop -> ProofState -> (Id, ProofState)
+newAssumption :: Prop -> ProofState -> (Hyp, ProofState)
 newAssumption prop ps =
-  (Id (ps_uniq ps),
+  (MkHyp (ps_uniq ps),
    ps { ps_uniq = ps_uniq ps + 1
-     , ps_assumptions = Map.insert (Id (ps_uniq ps)) prop (ps_assumptions ps) })
+     , ps_assumptions = Map.insert (MkHyp (ps_uniq ps)) prop (ps_assumptions ps) })
 
 newSubgoal :: Goal -> ProofState -> ProofState
 newSubgoal subgoal ps = ps { ps_subgoals = subgoal : ps_subgoals ps }
@@ -81,69 +102,130 @@ newSubgoal subgoal ps = ps { ps_subgoals = subgoal : ps_subgoals ps }
 setGoal :: Goal -> ProofState -> ProofState
 setGoal goal ps = ps { ps_goal = goal }
 
-lookupAssumption :: Id -> Proof (Maybe Prop)
+lookupAssumption :: Hyp -> Proof (Maybe Prop)
 lookupAssumption i = Map.lookup i <$> gets ps_assumptions
+
+
+insertVarSrcInfo :: Var -> SrcInfo -> Proof ()
+insertVarSrcInfo i info = modify $ \ps ->
+  ps { ps_ann_vars = Map.insert i info (ps_ann_vars ps) }
+
+insertHypSrcInfo :: Hyp -> SrcInfo -> Proof ()
+insertHypSrcInfo h info = modify $ \ps ->
+  ps { ps_ann_hyps = Map.insert h info (ps_ann_hyps ps) }
+
+updateLastTacticInfo :: SrcInfo -> Proof ()
+updateLastTacticInfo info = modify $ \ps -> ps { ps_ann_last = Just info }
+
+
 
 -- | Proof errors
 data ProofError =
     IncompleteProof ProofState
-  | InvalidTactic String Goal
-  | NoMoreSubgoals String
+  | InvalidTactic   ProofState String Goal
+  | NoMoreSubgoals  ProofState String
   deriving Show
 
 -- | The proof type
-type Proof = StateT ProofState (ExceptT ProofError Identity)
+type Proof = StateT ProofState (ExceptT ProofError IO)
 
-runProof :: Proof a -> Either ProofError a
-runProof = runIdentity . runExceptT . flip evalStateT emptyProofState
+instance Annotated SrcInfo Proof Prop where
+  annotateM info pp = do
+    p <- pp
+    case p of
+      Var v -> insertVarSrcInfo v info >> return p
+      _     -> return p
 
-runProof' :: Proof a -> IO ()
-runProof' p =
-  case runProof p of
+instance Annotated SrcInfo Proof Hyp where
+  annotateM info ph = do
+    h <- ph
+    insertHypSrcInfo h info
+    return h
+
+instance Annotated SrcInfo Proof () where
+  annotateM info pu = do
+    () <- pu
+    updateLastTacticInfo info
+    return ()
+
+
+runProof :: Proof a -> IO (Either ProofError a)
+runProof = runExceptT . flip evalStateT emptyProofState
+
+runProofInteractive :: Proof a -> IO ()
+runProofInteractive p =
+  runProof p >>= \case
     Right _ -> putStrLn "No more subgoals"
-    Left (InvalidTactic name goal) -> printInvalidTactic name goal
+    Left (InvalidTactic ps name goal) -> printInvalidTactic ps name goal
     Left (IncompleteProof ps) -> printIncompleteProof ps
-    Left (NoMoreSubgoals name) -> printNoMoreSubgoals name
+    Left (NoMoreSubgoals ps name) -> printNoMoreSubgoals name
 
-printInvalidTactic :: String -> Goal -> IO ()
-printInvalidTactic name goal = do
+printInvalidTactic :: ProofState -> String -> Goal -> IO ()
+printInvalidTactic ps name goal = do
+  case ps_ann_last ps of
+    Just (MkSrcInfo _ (Just (f,r,c))) -> putStrLn $ "Error at: " ++ f ++ ":" ++ show (r,c)
+    _ -> return ()
   putStrLn $ "Cannot apply tactic <" ++ name ++ "> to the current goal:"
-  putStrLn (showProp goal)
+  putStrLn (showProp ps goal)
+
 
 printIncompleteProof :: ProofState -> IO ()
 printIncompleteProof ps = do
   putStrLn "----------------------------------------"
   putStrLn $ show (length (ps_subgoals ps)) ++ " subgoals:"
-  forM_ (Set.elems (ps_variables ps)) $ \(Id i) -> do
-    putStrLn $ "V" ++ show i ++ " : Prop"
-  forM_ (Map.assocs (ps_assumptions ps)) $ \(Id i, prop) -> do
-    putStrLn $ "H" ++ show i ++ " : " ++ showProp prop
+  forM_ (Set.elems (ps_variables ps)) $ \i -> do
+    putStrLn $ showVar ps i ++ " : Prop"
+  forM_ (Map.assocs (ps_assumptions ps)) $ \(h, prop) -> do
+    putStrLn $ showHyp ps h ++ " : " ++ showProp ps prop
   putStrLn "========================================"
-  putStrLn $ showProp (head (ps_subgoals ps))
+  putStrLn $ showProp ps (head (ps_subgoals ps))
   putStrLn "----------------------------------------"
+
+showVar :: ProofState -> Var -> String
+showVar ps i
+  | Just (MkSrcInfo (Just name) _) <- Map.lookup i (ps_ann_vars ps) = name
+  | otherwise = "v_" ++ show (unVar i)
+
+showHyp :: ProofState -> Hyp -> String
+showHyp ps h
+  | Just (MkSrcInfo (Just name) _) <- Map.lookup h (ps_ann_hyps ps) = name
+  | otherwise = "H" ++ show (unHyp h)
 
 printNoMoreSubgoals :: String -> IO ()
 printNoMoreSubgoals name =
   putStrLn $ "No subgoals left in this branch to apply tactic <" ++ name ++ ">"
 
-showProp :: Prop -> String
-showProp = \case
+showProp :: ProofState -> Prop -> String
+showProp ps = \case
   TRUE -> "TRUE"
   FALSE -> "FALSE"
-  Var (Id i) -> "V" ++ show i
+  Var v -> showVar ps v
   Neg FALSE -> "¬TRUE"
   Neg TRUE -> "¬FALSE"
-  Neg prop@(Var {}) -> "¬" ++ showProp prop
-  Neg prop -> "¬(" ++ showProp prop ++ ")"
-  And x y -> "(" ++ showProp x ++ " /\\ " ++ showProp y ++ ")"
-  Or  x y -> "(" ++ showProp x ++ " \\/ " ++ showProp y ++ ")"
-  Imp x y -> "(" ++ showProp x ++ " ==> " ++ showProp y ++ ")"
-  Eq  x y -> "(" ++ showProp x ++ " <=> " ++ showProp y ++ ")"
+  Neg prop@(Var {}) -> "¬" ++ showProp ps prop
+  Neg prop -> "¬(" ++ showProp ps prop ++ ")"
+  And x y -> "(" ++ showProp ps x ++ " /\\ " ++ showProp ps y ++ ")"
+  Or  x y -> "(" ++ showProp ps x ++ " \\/ " ++ showProp ps y ++ ")"
+  Imp x y -> "(" ++ showProp ps x ++ " ==> " ++ showProp ps y ++ ")"
+  Eq  x y -> "(" ++ showProp ps x ++ " <=> " ++ showProp ps y ++ ")"
+
+
+
 
 
 -- | Proof basic constuctions
-variable :: Proof Prop
-variable = state newVar
+var :: Proof Prop
+var = state newVar
+
+class Variables a where
+  vars :: Proof a
+
+instance Variables (Prop, Prop) where
+  vars = (,) <$> var <*> var
+
+instance Variables (Prop, Prop, Prop) where
+  vars = (,,) <$> var <*> var <*> var
+
 
 proof :: Prop -> Proof Prop -> Proof Prop
 proof goal body = modify (setGoal goal . newSubgoal goal) >> body
@@ -155,25 +237,27 @@ qed = do
     then return (ps_goal ps)
     else throwError (IncompleteProof ps)
 
+
+
 -- | Tactics
-intro :: Proof Id
+intro :: Proof Hyp
 intro = gets ps_subgoals >>= \case
   Imp x y : goals ->
     state $ \ps -> newAssumption x (ps { ps_subgoals = y : goals })
-  goal : _ -> throwError (InvalidTactic "intro" goal)
-  _        -> throwError (NoMoreSubgoals "intro")
+  goal : _ -> get >>= \ps -> throwError (InvalidTactic ps "intro" goal)
+  _        -> get >>= \ps -> throwError (NoMoreSubgoals ps "intro")
 
 intro_ :: Proof ()
 intro_ = void intro
 
-exact :: Id -> Proof ()
+exact :: Hyp -> Proof ()
 exact i = do
   ass <- lookupAssumption i
   gets ps_subgoals >>= \case
     g : goals | ass == Just g ->
       modify $ \ps -> ps { ps_subgoals = goals }
-    goal : _ -> throwError (InvalidTactic "exact" goal)
-    _        -> throwError (NoMoreSubgoals "exact")
+    goal : _ -> get >>= \ps -> throwError (InvalidTactic ps "exact" goal)
+    _        -> get >>= \ps -> throwError (NoMoreSubgoals ps "exact")
 
 assumption :: Proof ()
 assumption = do
@@ -181,8 +265,8 @@ assumption = do
   gets ps_subgoals >>= \case
     goal : goals | goal `elem` assumptions ->
       modify $ \ps -> ps { ps_subgoals = goals }
-    goal : _ -> throwError (InvalidTactic "assumption" goal)
-    _        -> throwError (NoMoreSubgoals "assumption")
+    goal : _ -> get >>= \ps -> throwError (InvalidTactic ps "assumption" goal)
+    _        -> get >>= \ps -> throwError (NoMoreSubgoals ps "assumption")
 
 split :: Proof () -> Proof ()
 split body = gets ps_subgoals >>= \case
@@ -192,8 +276,8 @@ split body = gets ps_subgoals >>= \case
     body
     void qed
     modify $ \ps -> ps { ps_subgoals = goals, ps_assumptions = assumptions }
-  goal : _ -> throwError (InvalidTactic "split" goal)
-  _        -> throwError (NoMoreSubgoals "split")
+  goal : _ -> get >>= \ps -> throwError (InvalidTactic ps "split" goal)
+  _        -> get >>= \ps -> throwError (NoMoreSubgoals ps "split")
 
 left :: Proof () -> Proof ()
 left body = gets ps_subgoals >>= \case
@@ -203,8 +287,8 @@ left body = gets ps_subgoals >>= \case
     body
     void qed
     modify $ \ps -> ps { ps_subgoals = goals, ps_assumptions = assumptions }
-  goal : _ -> throwError (InvalidTactic "left" goal)
-  _        -> throwError (NoMoreSubgoals "left")
+  goal : _ -> get >>= \ps -> throwError (InvalidTactic ps "left" goal)
+  _        -> get >>= \ps -> throwError (NoMoreSubgoals ps "left")
 
 right :: Proof () -> Proof ()
 right body = gets ps_subgoals >>= \case
@@ -214,21 +298,48 @@ right body = gets ps_subgoals >>= \case
     body
     void qed
     modify $ \ps -> ps { ps_subgoals = goals, ps_assumptions = assumptions }
-  goal : _ -> throwError (InvalidTactic "right" goal)
-  _        -> throwError (NoMoreSubgoals "right")
+  goal : _ -> get >>= \ps -> throwError (InvalidTactic ps "right" goal)
+  _        -> get >>= \ps -> throwError (NoMoreSubgoals ps "right")
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+----------------------------------------
 -- | Tests
 
-test :: Proof Prop
-test = do
+main = runProofInteractive := do
 
-  p <- variable
-  q <- variable
+  (p, q) <- vars
 
-  proof (p ==> q ==> p \/ q) do
-    intro
-    intro
-    left do
-      assumption
+  proof (p ==> q ==> p /\ q) := do
+    h1 <- intro 
+    h2 <- intro
+
+    split := do
+      -- void qed
+      exact h1
+      exact h1
+
     qed
+
+
+
+
+
+
+
+
