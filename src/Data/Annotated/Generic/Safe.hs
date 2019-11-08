@@ -7,7 +7,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE BangPatterns #-}
-module Control.Monad.Annotated.Unsafe
+module Data.Annotated.Generic.Safe
   ( Annotated
   , runAnnotated, evalAnnotated, execAnnotated
   , AnnotatedT(..)
@@ -72,15 +72,19 @@ execAnnotatedT :: forall ann m a. Monad m => AnnotatedT ann m a -> m (StableMap 
 execAnnotatedT m = snd <$> runAnnotatedT m
 
 -- actions over annotations
-createAnn_ :: Monad m => a -> ann -> AnnotatedT ann m ()
-createAnn_ !a ann = AnnotatedT . StateT $ \anns ->
-  return ((), insertStableNameUnsafe a ann anns)
+createAnn_ :: MonadIO m => a -> ann -> AnnotatedT ann m ()
+createAnn_ a ann = do
+  AnnotatedT . StateT $ \anns -> do
+    anns' <- liftIO (insertStableName a ann anns)
+    return ((), anns')
 
-lookupAnn_ :: Monad m => a -> AnnotatedT ann m (Maybe ann)
-lookupAnn_ !a = AnnotatedT . StateT $ \anns ->
-  return (lookupStableNameUnsafe a anns, anns)
+lookupAnn_ :: MonadIO m => a -> AnnotatedT ann m (Maybe ann)
+lookupAnn_ !a = do
+  AnnotatedT . StateT $ \anns -> do
+    ann <- lookupStableName a anns
+    return (ann, anns)
 
-instance Monad m => MonadAnnotated ann (AnnotatedT ann m) where
+instance MonadIO m => MonadAnnotated ann (AnnotatedT ann m) where
   createAnn = createAnn_
   lookupAnn = lookupAnn_
 

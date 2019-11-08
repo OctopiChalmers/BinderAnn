@@ -24,8 +24,8 @@ class Monad m => MonadAnnotated ann m where
   lookupAnn :: a -> m (Maybe ann)
 
 -- Annotate the return value of a monadic computation
-annotateM :: MonadAnnotated ann m => ann -> m a -> m a
-annotateM ann ma = do
+annotateM :: MonadAnnotated ann m => m a -> ann -> m a
+annotateM ma ann = do
   a <- ma
   createAnn a ann
   return a

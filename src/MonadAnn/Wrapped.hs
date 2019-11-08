@@ -1,12 +1,11 @@
 {-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE FlexibleContexts #-}
-module Peekaboo.Wrapped where
+module MonadAnn.Wrapped where
 
-import qualified Data.Annotated as Pure
+import MonadAnn.SrcInfo
+import qualified Data.Annotated.Pure    as Pure
 import qualified Data.Annotated.Monadic as Monadic
-import qualified Control.Monad.Annotated.Class as Transformer
-
-import Peekaboo.SrcInfo
+import qualified Data.Annotated.Generic as Generic
 
 ----------------------------------------
 -- | Name wrappers
@@ -16,73 +15,64 @@ import Peekaboo.SrcInfo
 -- dealing with data constructor names is a pain in the ass, so I wrap them up
 -- with variable names as well. :)
 
--- Peekaboo.SrcInfo
-__Peekaboo_SrcInfo__ :: Maybe String -> Maybe Loc -> SrcInfo
-__Peekaboo_SrcInfo__ = MkSrcInfo
+-- MonadAnn.Info
+__MonadAnn_Info__ :: Maybe String -> Maybe Loc -> SrcInfo
+__MonadAnn_Info__ = Info
 
 -- Data.Annotated.annotateM
-__Peekaboo_Data_Annotated_annotateM__
-  :: (Monad m, Pure.Annotated SrcInfo a)
-  => SrcInfo -> m a -> m a
-__Peekaboo_Data_Annotated_annotateM__ =
-  Pure.annotateM
+__MonadAnn_annotateM_Pure__ :: (Monad m, Pure.Annotated SrcInfo a) => m a -> SrcInfo -> m a
+__MonadAnn_annotateM_Pure__ = Pure.annotateM
 
 -- Data.Annotated.Monadic.annotateM
-__Peekaboo_Data_Annotated_Monadic_annotateM__
-  :: Monadic.Annotated SrcInfo m a
-  => SrcInfo -> m a -> m a
-__Peekaboo_Data_Annotated_Monadic_annotateM__ =
-  Monadic.annotateM
+__MonadAnn_annotateM_Monadic__ :: Monadic.Annotated SrcInfo m a => m a -> SrcInfo -> m a
+__MonadAnn_annotateM_Monadic__ = Monadic.annotateM
 
   -- Control.Monad.Annotated.Class.annotateM
-__Peekaboo_Control_Monad_Annotated_annotateM__
-  :: Transformer.MonadAnnotated SrcInfo m
-  => SrcInfo -> m a -> m a
-__Peekaboo_Control_Monad_Annotated_annotateM__ =
-  Transformer.annotateM
+__MonadAnn_annotateM_Generic__ :: Generic.MonadAnnotated SrcInfo m => m a -> SrcInfo -> m a
+__MonadAnn_annotateM_Generic__ = Generic.annotateM
 
 -- Prelude.flip
-__Peekaboo_flip__ :: (a -> b -> c) -> (b -> a -> c)
-__Peekaboo_flip__ = flip
+__MonadAnn_flip__ :: (a -> b -> c) -> (b -> a -> c)
+__MonadAnn_flip__ = flip
 
 -- Prelude.Just
-__Peekaboo_Just__ :: a -> Maybe a
-__Peekaboo_Just__ = Just
+__MonadAnn_Just__ :: a -> Maybe a
+__MonadAnn_Just__ = Just
 
 -- Prelude.Nothing
-__Peekaboo_Nothing__ :: Maybe a
-__Peekaboo_Nothing__ = Nothing
+__MonadAnn_Nothing__ :: Maybe a
+__MonadAnn_Nothing__ = Nothing
 
 -- | Tuple liftings
-__Peekaboo_lift_tuple_2__
+__MonadAnn_lift_tuple_2__
   :: Monad m
   => (m a -> m a', m b -> m b')
   -> m (a, b)
   -> m (a', b')
-__Peekaboo_lift_tuple_2__ (fa, fb) m = do
+__MonadAnn_lift_tuple_2__ (fa, fb) m = do
   (a, b) <- m
   a' <- fa (return a)
   b' <- fb (return b)
   return (a', b')
 
-__Peekaboo_lift_tuple_3__
+__MonadAnn_lift_tuple_3__
   :: Monad m
   => (m a -> m a', m b -> m b', m c -> m c')
   -> m (a, b, c)
   -> m (a', b', c')
-__Peekaboo_lift_tuple_3__ (fa, fb, fc) m = do
+__MonadAnn_lift_tuple_3__ (fa, fb, fc) m = do
   (a, b, c) <- m
   a' <- fa (return a)
   b' <- fb (return b)
   c' <- fc (return c)
   return (a', b', c')
 
-__Peekaboo_lift_tuple_4__
+__MonadAnn_lift_tuple_4__
   :: Monad m
   => (m a -> m a', m b -> m b', m c -> m c', m d -> m d')
   -> m (a, b, c, d)
   -> m (a', b', c', d')
-__Peekaboo_lift_tuple_4__ (fa, fb, fc, fd) m = do
+__MonadAnn_lift_tuple_4__ (fa, fb, fc, fd) m = do
   (a, b, c, d) <- m
   a' <- fa (return a)
   b' <- fb (return b)
@@ -90,12 +80,12 @@ __Peekaboo_lift_tuple_4__ (fa, fb, fc, fd) m = do
   d' <- fd (return d)
   return (a', b', c', d')
 
-__Peekaboo_lift_tuple_5__
+__MonadAnn_lift_tuple_5__
   :: Monad m
   => (m a -> m a', m b -> m b', m c -> m c', m d -> m d', m e -> m e')
   -> m (a, b, c, d, e)
   -> m (a', b', c', d', e')
-__Peekaboo_lift_tuple_5__ (fa, fb, fc, fd, fe) m = do
+__MonadAnn_lift_tuple_5__ (fa, fb, fc, fd, fe) m = do
   (a, b, c, d, e) <- m
   a' <- fa (return a)
   b' <- fb (return b)

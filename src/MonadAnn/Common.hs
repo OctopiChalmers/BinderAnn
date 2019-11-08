@@ -2,7 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE FlexibleContexts #-}
-module Peekaboo.Common where
+module MonadAnn.Common where
 
 import Control.Monad
 import Data.Generics (mkM, everywhereM, listify)
@@ -15,8 +15,8 @@ import OccName    as Name
 ----------------------------------------
 -- | The plugin itself, parameterized by the annotating function
 
-peekaboo :: RdrName -> [CommandLineOption] -> HsParsedModule -> Hsc HsParsedModule
-peekaboo ann_fun opts parsed = do
+monadann :: RdrName -> [CommandLineOption] -> HsParsedModule -> Hsc HsParsedModule
+monadann ann_fun opts parsed = do
   message $ "starting plugin"
 
   flags <- getDynFlags
@@ -29,8 +29,8 @@ peekaboo ann_fun opts parsed = do
   let anns = extractAnn <$> listify (isAnn flags) hsMod
 
   let transform =
-        everywhereM (mkM (annotateTokens       flags ann_fun ann_tok)) >=>
-        everywhereM (mkM (annotateTopLevelAnns flags ann_fun anns))
+        everywhereM (mkM (annotateInfix    flags ann_fun ann_tok)) >=>
+        everywhereM (mkM (annotateTopLevel flags ann_fun anns))
 
   hsMod' <- transform hsMod
 
@@ -43,13 +43,13 @@ peekaboo ann_fun opts parsed = do
 -- {-# ANN foo SrcInfo #-}
 -- foo = do ...
 --
-annotateTopLevelAnns
+annotateTopLevel
   :: DynFlags
   -> RdrName
   -> [RdrName]
   -> Match GhcPs (LHsExpr GhcPs)
   -> Hsc (Match GhcPs (LHsExpr GhcPs))
-annotateTopLevelAnns flags ann_fun anns = \case
+annotateTopLevel flags ann_fun anns = \case
 
   -- annotate match statements that appear in the module annotations
   Match m_x m_ctx m_ps
@@ -73,13 +73,13 @@ annotateTopLevelAnns flags ann_fun anns = \case
 --
 -- some expression <ann_tok> do ...
 --
-annotateTokens
+annotateInfix
   :: DynFlags
   -> RdrName
   -> RdrName
   -> LHsExpr GhcPs
   -> Hsc (LHsExpr GhcPs)
-annotateTokens flags ann_fun ann_tok = \case
+annotateInfix flags ann_fun ann_tok = \case
 
   -- annotate do expression prefixed with the annotation token
   L l (OpApp _
@@ -112,11 +112,11 @@ annotateStmt flags ann_fun = \case
 
     let body' =
           var ann_fun
-          & paren (var peekabooSrcInfo
-                   & paren (var peekabooJust
+          & paren body
+          & paren (var __Info__
+                   & paren (var __Just__
                             & varPatToLitStr flags pat)
                    & paren (mkLocExpr l))
-          & paren body
 
     message $ "  found single bind ("++ render bind ++ ") at " ++ render l
     return (L l (BindStmt x pat body' y z))
@@ -127,7 +127,7 @@ annotateStmt flags ann_fun = \case
 
         let bindStrs = varPatToLitStr flags <$> binds
         let body' =
-              var (peekabooLifter (length binds))
+              var (__lift_tuple__ (length binds))
               & mkAnnTuple ann_fun l bindStrs
               & paren body
 
@@ -139,10 +139,10 @@ annotateStmt flags ann_fun = \case
 
     let body' =
           var ann_fun
-          & paren (var peekabooSrcInfo
-                   & var peekabooNothing
-                   & paren (mkLocExpr l))
           & paren body
+          & paren (var __Info__
+                   & var __Nothing__
+                   & paren (mkLocExpr l))
 
     message $ "  found body statement at " ++ render l
     return (L l (BodyStmt x body' y z))
@@ -159,7 +159,7 @@ annotateStmt flags ann_fun = \case
 
 -- | Print a message to the console
 message :: String -> Hsc ()
-message str = liftIO $ putStrLn $ "[Peekaboo] " ++ str
+message str = liftIO $ putStrLn $ "[MonadAnn] " ++ str
 
 -- | Create a name from a string
 mkRdrName :: String -> RdrName
@@ -168,22 +168,23 @@ mkRdrName = mkUnqual Name.varName . mkFastString
 -- | Create a Loc tuple from a SrcSpan
 mkLocExpr :: SrcSpan -> LHsExpr GhcPs
 mkLocExpr (UnhelpfulSpan {}) =
-  var peekabooNothing
+  var __Nothing__
 mkLocExpr (RealSrcSpan loc) =
-  paren (var peekabooJust &
+  paren (var __Just__ &
          tuple [ strLit (srcSpanFile loc)
                , numLit (srcSpanStartLine loc)
                , numLit (srcSpanStartCol loc) ])
 
 -- | Create a tuple of the shape:
--- (ann_fun name1 loc, ann_fun name2, ...)
+-- (ann_fun name1 loc1, ann_fun name2 loc2, ...)
 mkAnnTuple :: RdrName -> SrcSpan -> [LHsExpr GhcPs] -> LHsExpr GhcPs
 mkAnnTuple ann_fun loc bindStrs =
   tuple (mkElem <$> bindStrs)
   where mkElem bindStrLit =
-         var ann_fun
-         & paren (var peekabooSrcInfo
-                  & paren (var peekabooJust & bindStrLit)
+         var __flip__
+         & var ann_fun
+         & paren (var __Info__
+                  & paren (var __Just__ & bindStrLit)
                   & paren (mkLocExpr loc))
 
 -- | Transform a variable pattern into its corresponding string expression
@@ -206,7 +207,7 @@ pattern HsAnn lhs rhs <-
   (L _ (HsVar _ (L _ rhs)))
 
 isAnn :: DynFlags -> AnnDecl GhcPs -> Bool
-isAnn flags (HsAnn _ rhs) = showPpr flags rhs == showPpr flags peekabooSrcInfoTag
+isAnn flags (HsAnn _ rhs) = showPpr flags rhs == showPpr flags __SrcInfoTag__
 isAnn _     _             = False
 
 extractAnn :: AnnDecl GhcPs -> RdrName
@@ -244,26 +245,29 @@ tuple exprs = noLoc (ExplicitTuple noExt (noLoc . Present noExt <$> exprs) Boxed
 -- | Name wrappers
 
 -- | Wrapped names
-peekabooSrcInfoTag :: RdrName
-peekabooSrcInfoTag = mkRdrName "SrcInfo"
+__SrcInfoTag__ :: RdrName
+__SrcInfoTag__ = mkRdrName "SrcInfo"
 
-peekabooJust :: RdrName
-peekabooJust = mkRdrName "__Peekaboo_Just__"
+__Just__ :: RdrName
+__Just__ = mkRdrName "__MonadAnn_Just__"
 
-peekabooNothing :: RdrName
-peekabooNothing = mkRdrName "__Peekaboo_Nothing__"
+__Nothing__ :: RdrName
+__Nothing__ = mkRdrName "__MonadAnn_Nothing__"
 
-peekabooSrcInfo :: RdrName
-peekabooSrcInfo = mkRdrName "__Peekaboo_SrcInfo__"
+__Info__ :: RdrName
+__Info__ = mkRdrName "__MonadAnn_Info__"
 
-peekabooAnnotateMPure :: RdrName
-peekabooAnnotateMPure = mkRdrName "__Peekaboo_Data_Annotated_annotateM__"
+__flip__ :: RdrName
+__flip__ = mkRdrName "__MonadAnn_flip__"
 
-peekabooAnnotateMMonadic :: RdrName
-peekabooAnnotateMMonadic = mkRdrName "__Peekaboo_Data_Annotated_Monadic_annotateM__"
+__annotateM_Pure__ :: RdrName
+__annotateM_Pure__ = mkRdrName "__MonadAnn_annotateM_Pure__"
 
-peekabooAnnotateMTransformer :: RdrName
-peekabooAnnotateMTransformer = mkRdrName "__Peekaboo_Control_Monad_Annotated_annotateM__"
+__annotateM_Monadic__ :: RdrName
+__annotateM_Monadic__ = mkRdrName "__MonadAnn_annotateM_Monadic__"
 
-peekabooLifter :: Int -> RdrName
-peekabooLifter n = mkRdrName $ "__Peekaboo_lift_tuple_"++ show n ++"__"
+__annotateM_Generic__ :: RdrName
+__annotateM_Generic__ = mkRdrName "__MonadAnn_annotateM_Generic__"
+
+__lift_tuple__ :: Int -> RdrName
+__lift_tuple__ n = mkRdrName $ "__MonadAnn_lift_tuple_"++ show n ++"__"

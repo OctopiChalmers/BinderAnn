@@ -2,17 +2,19 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
-module Data.Annotated where
+module Data.Annotated.Pure where
 
 ----------------------------------------
 -- Pure types that can be annotated by default
 
 class Annotated ann a where
-  annotate :: ann -> a -> a
+  annotate :: a -> ann -> a
 
 instance {-# OVERLAPPABLE #-} Annotated ann a where
-  annotate = const id
+  annotate a _ = a
 
 -- Annotate the return value of a monadic computation
-annotateM :: (Monad m, Annotated ann a) => ann -> m a -> m a
-annotateM ann ma = annotate ann <$> ma
+annotateM :: (Monad m, Annotated ann a) => m a -> ann -> m a
+annotateM ma ann = do
+  a <- ma
+  return (annotate a ann)

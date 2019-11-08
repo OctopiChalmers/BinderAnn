@@ -2,7 +2,7 @@ module Main where
 
 import qualified Pure
 import qualified Monadic
-import qualified Transformer
+import qualified Generic
 
 main :: IO ()
 main = do
@@ -10,6 +10,6 @@ main = do
   Pure.tests
   putStrLn "\n== Monadic =============================\n"
   Monadic.tests
-  putStrLn "\n== Monad Transformer====================\n"
-  Transformer.tests
+  putStrLn "\n== Generic =============================\n"
+  Generic.tests
   putStrLn "\n========================================\n"

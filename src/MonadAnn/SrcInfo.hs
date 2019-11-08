@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-module Peekaboo.SrcInfo where
+module MonadAnn.SrcInfo where
 
 import Data.Generics (Data)
 
@@ -7,9 +7,9 @@ import Data.Generics (Data)
 type Loc = (FilePath, Int, Int) -- file, line and column
 
 -- | The source information of a do statement
-data SrcInfo = MkSrcInfo (Maybe String) (Maybe Loc)
+data SrcInfo = Info (Maybe String) (Maybe Loc)
   deriving (Show, Read, Eq, Ord)
 
 -- | A tag constructor for SrcInfo that can be used with annotation pragmas
-data SrcInfoTag = SrcInfo
+data SrcInfoName = SrcInfo
   deriving Data

@@ -4,13 +4,13 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: bcaa8fe83577cd7f2fdfdd36520c0a719c958dcaae4560f2826b32d07c04edb5
+-- hash: ede17f234cea6ee10c8cea4d630456911756f5aad1ed43dfa292d9fabc13b21f
 
-name:           Peekaboo
+name:           MonadAnn
 version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/agustinmista/Peekaboo#readme>
-homepage:       https://github.com/agustinmista/Peekaboo#readme
-bug-reports:    https://github.com/agustinmista/Peekaboo/issues
+description:    Please see the README on GitHub at <https://github.com/OctopiChalmers/MonadAnn#readme>
+homepage:       https://github.com/OctopiChalmers/MonadAnn#readme
+bug-reports:    https://github.com/OctopiChalmers/MonadAnn/issues
 author:         Agustín Mista
 maintainer:     mista@chalmers.se
 copyright:      2019 Agustín Mista
@@ -23,25 +23,25 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/agustinmista/Peekaboo
+  location: https://github.com/OctopiChalmers/MonadAnn
 
 library
   exposed-modules:
-      Peekaboo.Pure
-      Peekaboo.Monadic
-      Peekaboo.Transformer
-      Data.Annotated
+      MonadAnn.Pure
+      MonadAnn.Monadic
+      MonadAnn.Generic
+      Data.Annotated.Pure
       Data.Annotated.Monadic
-      Control.Monad.Annotated
+      Data.Annotated.Generic.Safe
+      Data.Annotated.Generic.Unsafe
       Control.Monad.Annotated.Class
-      Control.Monad.Annotated.Safe
-      Control.Monad.Annotated.Unsafe
       System.Mem.StableMap
   other-modules:
-      Peekaboo.Common
-      Peekaboo.SrcInfo
-      Peekaboo.Wrapped
-      Paths_Peekaboo
+      Data.Annotated.Generic
+      MonadAnn.Common
+      MonadAnn.SrcInfo
+      MonadAnn.Wrapped
+      Paths_MonadAnn
   hs-source-dirs:
       src
   ghc-options: -Wall -O2
@@ -59,16 +59,15 @@ test-suite test-plugin
   type: exitcode-stdio-1.0
   main-is: Main.hs
   other-modules:
+      Generic
       Monadic
-      Prop
       Pure
-      Transformer
-      Paths_Peekaboo
+      Paths_MonadAnn
   hs-source-dirs:
       test
   ghc-options: -Wall -O2
   build-depends:
-      Peekaboo
+      MonadAnn
     , base >=4.7 && <5
     , containers
     , ghc
