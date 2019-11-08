@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: ede17f234cea6ee10c8cea4d630456911756f5aad1ed43dfa292d9fabc13b21f
+-- hash: a2d33a1ee48f949f276bbcb92e5b10bf13cc16708c5f269dd09155a797e1e115
 
 name:           MonadAnn
 version:        0.1.0.0
@@ -51,6 +51,7 @@ library
     , ghc
     , ghc-prim
     , mtl
+    , split
     , syb
     , transformers
   default-language: Haskell2010
@@ -73,6 +74,7 @@ test-suite test-plugin
     , ghc
     , ghc-prim
     , mtl
+    , split
     , syb
     , transformers
   default-language: Haskell2010

@@ -31,6 +31,7 @@ dependencies:
 - syb
 - mtl
 - transformers
+- split
 
 library:
   source-dirs: 

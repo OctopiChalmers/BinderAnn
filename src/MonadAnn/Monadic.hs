@@ -16,4 +16,4 @@ import Data.Annotated.Monadic
 -- The entry point of this version of the plugin
 
 plugin :: Plugin
-plugin = defaultPlugin { parsedResultAction = const . monadann __annotateM_Monadic__ }
+plugin = defaultPlugin { parsedResultAction = const . monadann_Monadic }

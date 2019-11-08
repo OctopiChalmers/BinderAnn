@@ -2,15 +2,30 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE FlexibleContexts #-}
-module MonadAnn.Common where
+module MonadAnn.Common
+  ( monadann_Pure
+  , monadann_Monadic
+  , monadann_Generic
+  ) where
 
-import Control.Monad
+import Data.List.Split
 import Data.Generics (mkM, everywhereM, listify)
 
 import FastString as FS
 import HsSyn      as GHC
 import GhcPlugins as GHC
 import OccName    as Name
+
+
+----------------------------------------
+-- | The plugin versions
+
+monadann_Pure    :: [CommandLineOption] -> HsParsedModule -> Hsc HsParsedModule
+monadann_Pure    = monadann __annotateM_Pure__
+monadann_Monadic :: [CommandLineOption] -> HsParsedModule -> Hsc HsParsedModule
+monadann_Monadic = monadann __annotateM_Monadic__
+monadann_Generic :: [CommandLineOption] -> HsParsedModule -> Hsc HsParsedModule
+monadann_Generic = monadann __annotateM_Generic__
 
 ----------------------------------------
 -- | The plugin itself, parameterized by the annotating function
@@ -22,23 +37,41 @@ monadann ann_fun opts parsed = do
   flags <- getDynFlags
   let L loc hsMod = hpm_module parsed
 
-  -- create an annotation token based on the plugin options (|$| by default)
-  let ann_tok = case opts of [sym] -> mkRdrName sym; _ -> mkRdrName "|$|"
+  annHsMod <- case runMode opts of
+    Full -> do
+      message $ "run mode: full"
+      mkM (annotateDo flags ann_fun) `everywhereM` hsMod
+    Tagged ann_tok -> do
+      message $ "run mode: tagged"
+      message $ "infix annotation token: " ++ show (showPpr flags ann_tok)
+      let anns = extractAnn <$> listify (isAnn flags) hsMod
+      hsMod' <- mkM (annotateTopLevel flags ann_fun anns) `everywhereM` hsMod
+      mkM (annotateInfix flags ann_fun ann_tok)           `everywhereM` hsMod'
 
-  -- extract all the annotation pragmas from the code
-  let anns = extractAnn <$> listify (isAnn flags) hsMod
-
-  let transform =
-        everywhereM (mkM (annotateInfix    flags ann_fun ann_tok)) >=>
-        everywhereM (mkM (annotateTopLevel flags ann_fun anns))
-
-  hsMod' <- transform hsMod
-
-  message $ "[!] done"
-  return parsed { hpm_module = L loc hsMod' }
+  message $ "done"
+  return parsed { hpm_module = L loc annHsMod }
 
 ----------------------------------------
--- | Search for top-level bindings of the shape:
+-- | Annotate a normal do expression
+
+annotateDo
+  :: DynFlags
+  -> RdrName
+  -> LHsExpr GhcPs
+  -> Hsc (LHsExpr GhcPs)
+annotateDo flags ann_fun = \case
+
+  -- annotate every do statemtent within a do expression
+  L l (HsDo  _ y (L z doStmts)) -> do
+    message $ "annotating do expression at " ++ showPpr flags l
+    doStmts' <- mapM (annotateStmt flags ann_fun) doStmts
+    return (L l (HsDo noExt y (L z doStmts')))
+
+  -- otherwise, just return the match unchanged
+  expr -> return expr
+
+----------------------------------------
+-- | Annotate a do expression defined in a top-level binding:
 --
 -- {-# ANN foo SrcInfo #-}
 -- foo = do ...
@@ -51,7 +84,7 @@ annotateTopLevel
   -> Hsc (Match GhcPs (LHsExpr GhcPs))
 annotateTopLevel flags ann_fun anns = \case
 
-  -- annotate match statements that appear in the module annotations
+  -- annotate match statements that appear in the module annotations pragmas
   Match m_x m_ctx m_ps
     (GRHSs grhss_x
       [L l (GRHS grhs_x grhs_guards
@@ -69,7 +102,7 @@ annotateTopLevel flags ann_fun anns = \case
   match -> return match
 
 ----------------------------------------
--- | Search for annotated do expressions of the shape:
+-- | Annotated do expressions at the right hand side of the annotation token:
 --
 -- some expression <ann_tok> do ...
 --
@@ -97,6 +130,7 @@ annotateInfix flags ann_fun ann_tok = \case
 
   -- otherwise, return the expression unchanged
   expr -> return expr
+
 
 ----------------------------------------
 -- | Annotate a single do statement
@@ -153,6 +187,21 @@ annotateStmt flags ann_fun = \case
   where render :: forall a. Outputable a => a -> String
         render = showPpr flags
 
+----------------------------------------
+-- | Command line options
+
+defaultToken :: RdrName
+defaultToken = mkRdrName "|$|"
+
+data RunMode = Full | Tagged RdrName
+
+runMode :: [String] -> RunMode
+runMode = \case
+  (option : _) | ["infix", tok] <- splitOpt option -> Tagged (mkRdrName tok)
+  ("full" : _) -> Full
+  _            -> Tagged defaultToken
+  where
+    splitOpt = splitOn "="
 
 ----------------------------------------
 -- | Helper functions
@@ -249,25 +298,25 @@ __SrcInfoTag__ :: RdrName
 __SrcInfoTag__ = mkRdrName "SrcInfo"
 
 __Just__ :: RdrName
-__Just__ = mkRdrName "__MonadAnn_Just__"
+__Just__ = mkRdrName "__Just__"
 
 __Nothing__ :: RdrName
-__Nothing__ = mkRdrName "__MonadAnn_Nothing__"
+__Nothing__ = mkRdrName "__Nothing__"
 
 __Info__ :: RdrName
-__Info__ = mkRdrName "__MonadAnn_Info__"
+__Info__ = mkRdrName "__Info__"
 
 __flip__ :: RdrName
-__flip__ = mkRdrName "__MonadAnn_flip__"
+__flip__ = mkRdrName "__flip__"
 
 __annotateM_Pure__ :: RdrName
-__annotateM_Pure__ = mkRdrName "__MonadAnn_annotateM_Pure__"
+__annotateM_Pure__ = mkRdrName "__annotateM_Pure__"
 
 __annotateM_Monadic__ :: RdrName
-__annotateM_Monadic__ = mkRdrName "__MonadAnn_annotateM_Monadic__"
+__annotateM_Monadic__ = mkRdrName "__annotateM_Monadic__"
 
 __annotateM_Generic__ :: RdrName
-__annotateM_Generic__ = mkRdrName "__MonadAnn_annotateM_Generic__"
+__annotateM_Generic__ = mkRdrName "__annotateM_Generic__"
 
 __lift_tuple__ :: Int -> RdrName
-__lift_tuple__ n = mkRdrName $ "__MonadAnn_lift_tuple_"++ show n ++"__"
+__lift_tuple__ n = mkRdrName $ "__lift_tuple_"++ show n ++"__"

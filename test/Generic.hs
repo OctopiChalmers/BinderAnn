@@ -11,7 +11,10 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ConstraintKinds #-}
 
-{-# OPTIONS_GHC -fplugin=MonadAnn.Generic #-}
+{-# OPTIONS_GHC
+  -fplugin     MonadAnn.Generic
+  -fplugin-opt MonadAnn.Generic:full
+#-}
 
 module Generic where
 

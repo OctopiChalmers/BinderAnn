@@ -1,7 +1,10 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
-{-# OPTIONS_GHC -fplugin MonadAnn.Pure #-}
+{-# OPTIONS_GHC
+  -fplugin     MonadAnn.Pure
+  -fplugin-opt MonadAnn.Pure:full
+#-}
 
 module Pure where
 
@@ -38,7 +41,6 @@ val n = return (Val n)
 (|+|) :: Exp -> Exp -> Eval Exp
 x |+| y = return (Add x y)
 
-{-# ANN test1 SrcInfo #-}
 test1 :: Eval Exp
 test1 = do
   (x, y) <- (,) <$> val 10 <*> val 5

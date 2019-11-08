@@ -16,4 +16,4 @@ import Data.Annotated.Generic
 -- The entry point of this version of the plugin
 
 plugin :: Plugin
-plugin = defaultPlugin { parsedResultAction = const . monadann __annotateM_Generic__ }
+plugin = defaultPlugin { parsedResultAction = const . monadann_Generic }

@@ -30,6 +30,10 @@ annotateM ma ann = do
   createAnn a ann
   return a
 
+instance {-# OVERLAPPABLE #-} Monad m => MonadAnnotated ann m where
+  createAnn _ _ = return ()
+  lookupAnn _   = return Nothing
+
 ----------------------------------------
 -- Instances for other mtl transformers
 
