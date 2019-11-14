@@ -11,14 +11,14 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ConstraintKinds #-}
 
-{-# OPTIONS_GHC -fplugin=MonadAnn.Monadic #-}
+{-# OPTIONS_GHC -fplugin=BinderAnn.Monadic #-}
 
 module Monadic where
 
 import Control.Monad.State
 import Control.Monad.Except
 
-import MonadAnn.Monadic
+import BinderAnn.Monadic
 
 
 ----------------------------------------

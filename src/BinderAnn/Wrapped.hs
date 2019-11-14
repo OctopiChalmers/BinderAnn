@@ -1,8 +1,8 @@
 {-# LANGUAGE MonoLocalBinds #-}
 {-# LANGUAGE FlexibleContexts #-}
-module MonadAnn.Wrapped where
+module BinderAnn.Wrapped where
 
-import MonadAnn.SrcInfo
+import BinderAnn.SrcInfo
 import qualified Data.Annotated.Pure    as Pure
 import qualified Data.Annotated.Monadic as Monadic
 import qualified Data.Annotated.Generic as Generic
@@ -15,7 +15,7 @@ import qualified Data.Annotated.Generic as Generic
 -- dealing with data constructor names is a pain in the ass, so I wrap them up
 -- with variable names as well. :)
 
--- MonadAnn.Info
+-- BinderAnn.Info
 __Info__ :: Maybe String -> Maybe Loc -> SrcInfo
 __Info__ = Info
 

@@ -10,5 +10,5 @@ module Data.Annotated.Monadic where
 class Monad m => Annotated ann m a where
   annotateM :: m a -> ann -> m a
 
-instance {-# OVERLAPPABLE #-} Monad m => Annotated ann m a where
+instance {-# INCOHERENT #-} Monad m => Annotated ann m a where
   annotateM ma _ = ma

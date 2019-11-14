@@ -1,6 +1,6 @@
-name:                MonadAnn
+name:                BinderAnn
 version:             0.1.0.0
-github:              "OctopiChalmers/MonadAnn"
+github:              "OctopiChalmers/BinderAnn"
 license:             BSD3
 author:              "Agustín Mista"
 maintainer:          "mista@chalmers.se"
@@ -14,8 +14,8 @@ copyright:           "2019 Agustín Mista"
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
 
-description:         
-  Please see the README on GitHub at <https://github.com/OctopiChalmers/MonadAnn#readme>
+description:
+  Please see the README on GitHub at <https://github.com/OctopiChalmers/BinderAnn#readme>
 
 ghc-options: -Wall -O2
 
@@ -34,12 +34,12 @@ dependencies:
 - split
 
 library:
-  source-dirs: 
+  source-dirs:
   - src
-  exposed-modules: 
-  - MonadAnn.Pure
-  - MonadAnn.Monadic
-  - MonadAnn.Generic
+  exposed-modules:
+  - BinderAnn.Pure
+  - BinderAnn.Monadic
+  - BinderAnn.Generic
   - Data.Annotated.Pure
   - Data.Annotated.Monadic
   - Data.Annotated.Generic.Safe
@@ -49,6 +49,6 @@ library:
 
 tests:
   test-plugin:
-    dependencies: MonadAnn 
+    dependencies: BinderAnn
     source-dirs:  test
     main:         Main.hs

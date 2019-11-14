@@ -2,8 +2,8 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 
 {-# OPTIONS_GHC
-  -fplugin     MonadAnn.Pure
-  -fplugin-opt MonadAnn.Pure:full
+  -fplugin     BinderAnn.Pure
+  -fplugin-opt BinderAnn.Pure:infix=@@
 #-}
 
 module Pure where
@@ -11,7 +11,7 @@ module Pure where
 import Control.Monad.Writer
 import Control.Monad.Identity
 
-import MonadAnn.Pure
+import BinderAnn.Pure
 
 data Exp =
     Val Int
@@ -42,7 +42,7 @@ val n = return (Val n)
 x |+| y = return (Add x y)
 
 test1 :: Eval Exp
-test1 = do
+test1 = id @@ do
   (x, y) <- (,) <$> val 10 <*> val 5
   z  <- return False
   w  <- (if z then val 1 else val 2)

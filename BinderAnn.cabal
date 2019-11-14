@@ -4,13 +4,13 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: a2d33a1ee48f949f276bbcb92e5b10bf13cc16708c5f269dd09155a797e1e115
+-- hash: e1edf8efaf4df909cf03f0cff756576618975656b00c2580be5dfddc6670ad3c
 
-name:           MonadAnn
+name:           BinderAnn
 version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/OctopiChalmers/MonadAnn#readme>
-homepage:       https://github.com/OctopiChalmers/MonadAnn#readme
-bug-reports:    https://github.com/OctopiChalmers/MonadAnn/issues
+description:    Please see the README on GitHub at <https://github.com/OctopiChalmers/BinderAnn#readme>
+homepage:       https://github.com/OctopiChalmers/BinderAnn#readme
+bug-reports:    https://github.com/OctopiChalmers/BinderAnn/issues
 author:         Agustín Mista
 maintainer:     mista@chalmers.se
 copyright:      2019 Agustín Mista
@@ -23,13 +23,13 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/OctopiChalmers/MonadAnn
+  location: https://github.com/OctopiChalmers/BinderAnn
 
 library
   exposed-modules:
-      MonadAnn.Pure
-      MonadAnn.Monadic
-      MonadAnn.Generic
+      BinderAnn.Pure
+      BinderAnn.Monadic
+      BinderAnn.Generic
       Data.Annotated.Pure
       Data.Annotated.Monadic
       Data.Annotated.Generic.Safe
@@ -37,11 +37,11 @@ library
       Control.Monad.Annotated.Class
       System.Mem.StableMap
   other-modules:
+      BinderAnn.Common
+      BinderAnn.SrcInfo
+      BinderAnn.Wrapped
       Data.Annotated.Generic
-      MonadAnn.Common
-      MonadAnn.SrcInfo
-      MonadAnn.Wrapped
-      Paths_MonadAnn
+      Paths_BinderAnn
   hs-source-dirs:
       src
   ghc-options: -Wall -O2
@@ -63,12 +63,12 @@ test-suite test-plugin
       Generic
       Monadic
       Pure
-      Paths_MonadAnn
+      Paths_BinderAnn
   hs-source-dirs:
       test
   ghc-options: -Wall -O2
   build-depends:
-      MonadAnn
+      BinderAnn
     , base >=4.7 && <5
     , containers
     , ghc

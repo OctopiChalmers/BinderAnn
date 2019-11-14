@@ -10,7 +10,7 @@ module Data.Annotated.Pure where
 class Annotated ann a where
   annotate :: a -> ann -> a
 
-instance {-# OVERLAPPABLE #-} Annotated ann a where
+instance {-# INCOHERENT #-} Annotated ann a where
   annotate a _ = a
 
 -- Annotate the return value of a monadic computation

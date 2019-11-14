@@ -12,8 +12,8 @@
 {-# LANGUAGE ConstraintKinds #-}
 
 {-# OPTIONS_GHC
-  -fplugin     MonadAnn.Generic
-  -fplugin-opt MonadAnn.Generic:full
+  -fplugin     BinderAnn.Generic
+  -fplugin-opt BinderAnn.Generic:full
 #-}
 
 module Generic where
@@ -21,7 +21,7 @@ module Generic where
 import Control.Monad.State
 import Control.Monad.Except
 
-import MonadAnn.Generic
+import BinderAnn.Generic
 
 
 ----------------------------------------

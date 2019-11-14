@@ -2,10 +2,10 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE FlexibleContexts #-}
-module MonadAnn.Common
-  ( monadann_Pure
-  , monadann_Monadic
-  , monadann_Generic
+module BinderAnn.Common
+  ( binderann_Pure
+  , binderann_Monadic
+  , binderann_Generic
   ) where
 
 import Data.List.Split
@@ -20,18 +20,18 @@ import OccName    as Name
 ----------------------------------------
 -- | The plugin versions
 
-monadann_Pure    :: [CommandLineOption] -> HsParsedModule -> Hsc HsParsedModule
-monadann_Pure    = monadann __annotateM_Pure__
-monadann_Monadic :: [CommandLineOption] -> HsParsedModule -> Hsc HsParsedModule
-monadann_Monadic = monadann __annotateM_Monadic__
-monadann_Generic :: [CommandLineOption] -> HsParsedModule -> Hsc HsParsedModule
-monadann_Generic = monadann __annotateM_Generic__
+binderann_Pure    :: [CommandLineOption] -> HsParsedModule -> Hsc HsParsedModule
+binderann_Pure    = binderann __annotateM_Pure__
+binderann_Monadic :: [CommandLineOption] -> HsParsedModule -> Hsc HsParsedModule
+binderann_Monadic = binderann __annotateM_Monadic__
+binderann_Generic :: [CommandLineOption] -> HsParsedModule -> Hsc HsParsedModule
+binderann_Generic = binderann __annotateM_Generic__
 
 ----------------------------------------
 -- | The plugin itself, parameterized by the annotating function
 
-monadann :: RdrName -> [CommandLineOption] -> HsParsedModule -> Hsc HsParsedModule
-monadann ann_fun opts parsed = do
+binderann :: RdrName -> [CommandLineOption] -> HsParsedModule -> Hsc HsParsedModule
+binderann ann_fun opts parsed = do
   message $ "starting plugin"
 
   flags <- getDynFlags
@@ -208,7 +208,7 @@ runMode = \case
 
 -- | Print a message to the console
 message :: String -> Hsc ()
-message str = liftIO $ putStrLn $ "[MonadAnn] " ++ str
+message str = liftIO $ putStrLn $ "[BinderAnn] " ++ str
 
 -- | Create a name from a string
 mkRdrName :: String -> RdrName

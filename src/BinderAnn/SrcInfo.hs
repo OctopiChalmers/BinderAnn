@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-module MonadAnn.SrcInfo where
+module BinderAnn.SrcInfo where
 
 import Data.Generics (Data)
 
