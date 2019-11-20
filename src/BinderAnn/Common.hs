@@ -13,7 +13,7 @@ import Data.Generics (mkM, everywhereM, listify)
 
 import FastString as FS
 import HsSyn      as GHC
-import GhcPlugins as GHC
+import GhcPlugins as GHC hiding (Auto)
 import OccName    as Name
 
 
@@ -38,15 +38,16 @@ binderann ann_fun opts parsed = do
   let L loc hsMod = hpm_module parsed
 
   annHsMod <- case runMode opts of
-    Full -> do
-      message $ "run mode: full"
+    Auto -> do
+      message $ "run mode: auto"
       mkM (annotateDo flags ann_fun) `everywhereM` hsMod
-    Tagged ann_tok -> do
-      message $ "run mode: tagged"
+    Manual ann_tok -> do
+      message $ "run mode: manual"
       message $ "infix annotation token: " ++ show (showPpr flags ann_tok)
+      let ann_op = mkRdrName ann_tok
       let anns = extractAnn <$> listify (isAnn flags) hsMod
       hsMod' <- mkM (annotateTopLevel flags ann_fun anns) `everywhereM` hsMod
-      mkM (annotateInfix flags ann_fun ann_tok)           `everywhereM` hsMod'
+      mkM (annotateInfix flags ann_fun ann_op)            `everywhereM` hsMod'
 
   message $ "done"
   return parsed { hpm_module = L loc annHsMod }
@@ -190,18 +191,26 @@ annotateStmt flags ann_fun = \case
 ----------------------------------------
 -- | Command line options
 
-defaultToken :: RdrName
-defaultToken = mkRdrName "|$|"
+defaultInfixOperator :: String
+defaultInfixOperator = "|$|"
 
-data RunMode = Full | Tagged RdrName
+data RunMode = Auto | Manual String
+  deriving Show
 
 runMode :: [String] -> RunMode
-runMode = \case
-  (option : _) | ["infix", tok] <- splitOpt option -> Tagged (mkRdrName tok)
-  ("full" : _) -> Full
-  _            -> Tagged defaultToken
-  where
-    splitOpt = splitOn "="
+runMode opts
+  | Just op <- optInfixOperator opts = Manual op
+  | optManual opts = Manual defaultInfixOperator
+  | otherwise = Auto
+
+optInfixOperator :: [String] -> Maybe String
+optInfixOperator = \case
+  [] -> Nothing
+  (o:_) | ["infix", tok] <- splitOn "=" o -> Just tok
+  (_:os) -> optInfixOperator os
+
+optManual :: [String] -> Bool
+optManual = any ("manual"==)
 
 ----------------------------------------
 -- | Helper functions

@@ -41,8 +41,8 @@ val n = return (Val n)
 (|+|) :: Exp -> Exp -> Eval Exp
 x |+| y = return (Add x y)
 
-test1 :: Eval Exp
-test1 = id @@ do
+
+test1 = runEval @@ do
   (x, y) <- (,) <$> val 10 <*> val 5
   z  <- return False
   w  <- (if z then val 1 else val 2)
@@ -52,5 +52,4 @@ test1 = id @@ do
 tests :: IO ()
 tests = do
   putStrLn "test1:"
-  print (runEval  test1)
-  print (runEval' test1)
+  print test1

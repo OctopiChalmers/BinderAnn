@@ -13,7 +13,6 @@
 
 {-# OPTIONS_GHC
   -fplugin     BinderAnn.Generic
-  -fplugin-opt BinderAnn.Generic:full
 #-}
 
 module Generic where
@@ -67,7 +66,6 @@ lit = return
 
 -- some tests
 
-{-# ANN test SrcInfo #-}
 test :: MonadEval m => m Int
 test = do
   zero <- lit 0
