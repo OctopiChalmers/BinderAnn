@@ -156,6 +156,25 @@ annotateStmt flags ann_fun = \case
     message $ "  found single bind ("++ render bind ++ ") at " ++ render l
     return (L l (BindStmt x pat body' y z))
 
+  -- bind statements where the lhs is a single type constructor
+  L l (BindStmt x pat@(L _ (ConPatIn (L _ _) argP)) body y z) ->
+    case hsConPatArgs argP of
+      [p] -> do
+        let body' =
+              var ann_fun
+              & paren body
+              & paren (var __Info__
+                      & paren (var __Just__
+                                & varPatToLitStr flags p)
+                      & paren (mkLocExpr l))
+
+        message $ "  found constructor bind ("++ render pat ++ ") at " ++ render l
+        return (L l (BindStmt x pat body' y z))
+
+      _ -> do
+        message $ "  skipping constructor bind ("++ render pat ++ ") at " ++ render l
+        return (L l (BindStmt x pat body y z))
+
   -- bind statements where the lhs is a tuple pattern
   L l (BindStmt x pat@(L _ (TuplePat _ binds _)) body y z)
     | length binds > 1 && length binds <= 5 && all isVarPat binds -> do
