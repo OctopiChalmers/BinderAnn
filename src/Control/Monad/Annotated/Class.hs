@@ -16,67 +16,65 @@ import Control.Monad.Trans.State.Strict as StrictS
 import Control.Monad.Trans.RWS.Lazy as LazyRWS
 import Control.Monad.Trans.RWS.Strict as StrictRWS
 
+import BinderAnn.SrcInfo
+
 ----------------------------------------
 -- The annotation monadic effect
 
-class Monad m => MonadAnnotated ann m where
-  createAnn :: a -> ann -> m ()
-  lookupAnn :: a -> m (Maybe ann)
+class Monad m => MonadAnnotated m where
+  createAnn :: a -> SrcInfo -> m ()
+  lookupAnn :: a -> m (Maybe SrcInfo)
 
 -- Annotate the return value of a monadic computation
-annotateM :: MonadAnnotated ann m => m a -> ann -> m a
+annotateM :: MonadAnnotated m => m a -> SrcInfo -> m a
 annotateM ma ann = do
   a <- ma
   createAnn a ann
   return a
 
-instance {-# OVERLAPPABLE #-} Monad m => MonadAnnotated ann m where
-  createAnn _ _ = return ()
-  lookupAnn _   = return Nothing
-
 ----------------------------------------
 -- Instances for other mtl transformers
 
-instance MonadAnnotated ann m => MonadAnnotated ann (ContT r m) where
+instance MonadAnnotated m => MonadAnnotated (ContT r m) where
   createAnn a = lift . createAnn a
   lookupAnn = lift . lookupAnn
 
-instance MonadAnnotated ann m => MonadAnnotated ann (ExceptT e m) where
+instance MonadAnnotated m => MonadAnnotated (ExceptT e m) where
   createAnn a = lift . createAnn a
   lookupAnn = lift . lookupAnn
 
-instance MonadAnnotated ann m => MonadAnnotated ann (IdentityT m) where
+instance MonadAnnotated m => MonadAnnotated (IdentityT m) where
   createAnn a = lift . createAnn a
   lookupAnn = lift . lookupAnn
 
-instance MonadAnnotated ann m => MonadAnnotated ann (MaybeT m) where
+instance MonadAnnotated m => MonadAnnotated (MaybeT m) where
   createAnn a = lift . createAnn a
   lookupAnn = lift . lookupAnn
 
-instance MonadAnnotated ann m => MonadAnnotated ann (ReaderT r m) where
+instance MonadAnnotated m => MonadAnnotated (ReaderT r m) where
   createAnn a = lift . createAnn a
   lookupAnn = lift . lookupAnn
 
-instance (Monoid w, MonadAnnotated ann m) => MonadAnnotated ann (LazyW.WriterT w m) where
+instance (Monoid w, MonadAnnotated m) => MonadAnnotated (LazyW.WriterT w m) where
   createAnn a = lift . createAnn a
   lookupAnn = lift . lookupAnn
 
-instance (Monoid w, MonadAnnotated ann m) => MonadAnnotated ann (StrictW.WriterT w m) where
+instance (Monoid w, MonadAnnotated m) => MonadAnnotated (StrictW.WriterT w m) where
   createAnn a = lift . createAnn a
   lookupAnn = lift . lookupAnn
 
-instance MonadAnnotated ann m => MonadAnnotated ann (LazyS.StateT s m) where
+instance MonadAnnotated m => MonadAnnotated (LazyS.StateT s m) where
   createAnn a = lift . createAnn a
   lookupAnn = lift . lookupAnn
 
-instance MonadAnnotated ann m => MonadAnnotated ann (StrictS.StateT s m) where
+instance MonadAnnotated m => MonadAnnotated (StrictS.StateT s m) where
   createAnn a = lift . createAnn a
   lookupAnn = lift . lookupAnn
 
-instance (MonadAnnotated ann m, Monoid w) => MonadAnnotated ann (LazyRWS.RWST r w s m) where
+instance (MonadAnnotated m, Monoid w) => MonadAnnotated (LazyRWS.RWST r w s m) where
   createAnn a = lift . createAnn a
   lookupAnn = lift . lookupAnn
 
-instance (MonadAnnotated ann m, Monoid w) => MonadAnnotated ann (StrictRWS.RWST r w s m) where
+instance (MonadAnnotated m, Monoid w) => MonadAnnotated (StrictRWS.RWST r w s m) where
   createAnn a = lift . createAnn a
   lookupAnn = lift . lookupAnn

@@ -20,15 +20,15 @@ __Info__ :: Maybe String -> Maybe Loc -> SrcInfo
 __Info__ = Info
 
 -- Data.Annotated.annotateM
-__annotateM_Pure__ :: (Monad m, Pure.Annotated SrcInfo a) => m a -> SrcInfo -> m a
+__annotateM_Pure__ :: (Monad m, Pure.Annotated a) => m a -> SrcInfo -> m a
 __annotateM_Pure__ = Pure.annotateM
 
 -- Data.Annotated.Monadic.annotateM
-__annotateM_Monadic__ :: Monadic.Annotated SrcInfo m a => m a -> SrcInfo -> m a
+__annotateM_Monadic__ :: Monadic.AnnotatedM m a => m a -> SrcInfo -> m a
 __annotateM_Monadic__ = Monadic.annotateM
 
   -- Control.Monad.Annotated.Class.annotateM
-__annotateM_Generic__ :: Generic.MonadAnnotated SrcInfo m => m a -> SrcInfo -> m a
+__annotateM_Generic__ :: Generic.MonadAnnotated m => m a -> SrcInfo -> m a
 __annotateM_Generic__ = Generic.annotateM
 
 -- Prelude.flip

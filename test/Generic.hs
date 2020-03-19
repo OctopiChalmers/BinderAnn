@@ -1,18 +1,18 @@
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE EmptyCase #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE EmptyCase #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 {-# OPTIONS_GHC
   -fplugin     BinderAnn.Generic
+  -fplugin-opt BinderAnn.Generic:manual
 #-}
 
 module Generic where
@@ -21,7 +21,6 @@ import Control.Monad.State
 import Control.Monad.Except
 
 import BinderAnn.Generic
-
 
 ----------------------------------------
 -- Example 1: Arithmetic expressions
@@ -32,12 +31,12 @@ data EvalError =
   deriving Show
 
 type MonadEval m =
-  ( MonadAnnotated SrcInfo   m
+  ( MonadAnnotated           m
   , MonadError     EvalError m
   , MonadIO                  m
   )
 
-type Eval = AnnotatedT SrcInfo (ExceptT EvalError IO)
+type Eval = AnnotatedT (ExceptT EvalError IO)
 
 runEval :: Eval a -> IO (Either EvalError a)
 runEval = runExceptT . evalAnnotatedT
@@ -65,9 +64,9 @@ lit = return
 
 
 -- some tests
-
-test :: MonadEval m => m Int
-test = do
+{-# ANN test1 SrcInfo #-}
+test1 :: MonadEval m => m Int
+test1 = do
   zero <- lit 0
   one  <- lit 1
   false <- return False
@@ -81,4 +80,4 @@ test = do
 tests :: IO ()
 tests = do
   putStrLn "test1:"
-  runEval test >>= print
+  runEval test1 >>= print

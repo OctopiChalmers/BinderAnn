@@ -40,16 +40,31 @@ binderann ann_fun opts parsed = do
   annHsMod <- case runMode opts of
     Auto -> do
       message $ "run mode: auto"
-      mkM (annotateDo flags ann_fun) `everywhereM` hsMod
+
+      message $ "annotating every do expression..."
+      hsMod' <- mkM (annotateDo flags ann_fun) `everywhereM` hsMod
+      message $ "done"
+
+      return hsMod'
+
     Manual ann_tok -> do
-      message $ "run mode: manual"
-      message $ "infix annotation token: " ++ show (showPpr flags ann_tok)
       let ann_op = mkRdrName ann_tok
       let anns = extractAnn <$> listify (isAnn flags) hsMod
-      hsMod' <- mkM (annotateTopLevel flags ann_fun anns) `everywhereM` hsMod
-      mkM (annotateInfix flags ann_fun ann_op)            `everywhereM` hsMod'
 
-  message $ "done"
+      message $ "run mode: manual"
+      message $ "infix annotation token: " ++ show ann_tok
+
+      message $ "annotating top level definitions..."
+      hsMod' <- mkM (annotateTopLevel flags ann_fun anns) `everywhereM` hsMod
+      message $ "done"
+
+      message $ "annotating infix tokens..."
+      hsMod'' <- mkM (annotateInfix flags ann_fun ann_op) `everywhereM` hsMod'
+      message $ "done"
+
+      return hsMod''
+
+  message $ "plugin finished!"
   return parsed { hpm_module = L loc annHsMod }
 
 ----------------------------------------
@@ -64,7 +79,7 @@ annotateDo flags ann_fun = \case
 
   -- annotate every do statemtent within a do expression
   L l (HsDo  _ y (L z doStmts)) -> do
-    message $ "annotating do expression at " ++ showPpr flags l
+    message $ "+ annotating do expression at " ++ showPpr flags l
     doStmts' <- mapM (annotateStmt flags ann_fun) doStmts
     return (L l (HsDo noExt y (L z doStmts')))
 
@@ -90,8 +105,8 @@ annotateTopLevel flags ann_fun anns = \case
     (GRHSs grhss_x
       [L l (GRHS grhs_x grhs_guards
              (L l' (HsDo do_x do_cxt (L l'' doStmts))))] lbs)
-    | unLoc (mc_fun m_ctx) `elem` anns -> do
-        message $ "annotating do expression at " ++ showPpr flags l
+    | isFunRhs m_ctx && unLoc (mc_fun m_ctx) `elem` anns -> do
+        message $ "+ annotating do expression at " ++ showPpr flags l
 
         doStmts' <- mapM (annotateStmt flags ann_fun) doStmts
         return (Match m_x m_ctx m_ps
@@ -101,6 +116,7 @@ annotateTopLevel flags ann_fun anns = \case
 
   -- otherwise, just return the match unchanged
   match -> return match
+
 
 ----------------------------------------
 -- | Annotated do expressions at the right hand side of the annotation token:
@@ -121,7 +137,7 @@ annotateInfix flags ann_fun ann_tok = \case
         (L _ (HsVar _   (L _ tok)))
         (L _ (HsDo  _ y (L z doStmts))))
     | showPpr flags tok == showPpr flags ann_tok -> do
-        message $ "annotating do expression at " ++ showPpr flags l
+        message $ "+ annotating do expression at " ++ showPpr flags l
 
         doStmts' <- mapM (annotateStmt flags ann_fun) doStmts
         let do' = L l (HsDo noExt y (L z doStmts'))
@@ -153,7 +169,7 @@ annotateStmt flags ann_fun = \case
                             & varPatToLitStr flags pat)
                    & paren (mkLocExpr l))
 
-    message $ "  found single bind ("++ render bind ++ ") at " ++ render l
+    message $ "  * found single bind ("++ render bind ++ ") at " ++ render l
     return (L l (BindStmt x pat body' y z))
 
   -- bind statements where the lhs is a single type constructor
@@ -165,14 +181,14 @@ annotateStmt flags ann_fun = \case
               & paren body
               & paren (var __Info__
                       & paren (var __Just__
-                                & varPatToLitStr flags p)
+                               & varPatToLitStr flags p)
                       & paren (mkLocExpr l))
 
-        message $ "  found constructor bind ("++ render pat ++ ") at " ++ render l
+        message $ "  * found constructor bind ("++ render pat ++ ") at " ++ render l
         return (L l (BindStmt x pat body' y z))
 
       _ -> do
-        message $ "  skipping constructor bind ("++ render pat ++ ") at " ++ render l
+        message $ "  * skipping constructor bind ("++ render pat ++ ") at " ++ render l
         return (L l (BindStmt x pat body y z))
 
   -- bind statements where the lhs is a tuple pattern
@@ -185,7 +201,7 @@ annotateStmt flags ann_fun = \case
               & mkAnnTuple ann_fun l bindStrs
               & paren body
 
-        message $ "  found tuple bind ("++ render pat ++ ") at " ++ render l
+        message $ "  * found tuple bind ("++ render pat ++ ") at " ++ render l
         return (L l (BindStmt x pat body' y z))
 
   -- body statements
@@ -198,7 +214,7 @@ annotateStmt flags ann_fun = \case
                    & var __Nothing__
                    & paren (mkLocExpr l))
 
-    message $ "  found body statement at " ++ render l
+    message $ "  * found body statement at " ++ render l
     return (L l (BodyStmt x body' y z))
 
   -- everything else is left unchanged
@@ -275,6 +291,11 @@ isVarPat :: LPat GhcPs -> Bool
 isVarPat (L _ (VarPat {})) = True
 isVarPat _                 =  False
 
+-- | Is this a patter matching an argument of a function binding?
+isFunRhs :: HsMatchContext id -> Bool
+isFunRhs (FunRhs {}) = True
+isFunRhs _           = False
+
 -- | Check whether an annotation pragma is of the shape:
 -- | {-# ANN ident SrcInfo #-}
 pattern HsAnn :: RdrName -> RdrName -> AnnDecl GhcPs
@@ -290,7 +311,6 @@ isAnn _     _             = False
 extractAnn :: AnnDecl GhcPs -> RdrName
 extractAnn (HsAnn target _) = target
 extractAnn _                = error "this should not happen"
-
 
 ----------------------------------------
 -- | Located expressions builder interface

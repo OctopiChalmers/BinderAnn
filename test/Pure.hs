@@ -21,7 +21,7 @@ data Exp =
 
 type Eval = WriterT [SrcInfo] Identity
 
-instance Annotated SrcInfo Exp where
+instance Annotated Exp where
   annotate = Ann
 
 runEval :: Eval Exp -> (Int, [SrcInfo])
