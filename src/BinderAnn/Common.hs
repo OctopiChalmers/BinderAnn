@@ -11,10 +11,10 @@ module BinderAnn.Common
 import Data.List.Split
 import Data.Generics (mkM, everywhereM, listify)
 
-import FastString as FS
-import HsSyn      as GHC
-import GhcPlugins as GHC hiding (Auto)
-import OccName    as Name
+import GHC.Data.FastString          as FS
+import GHC.Hs                       as GHC
+import GHC.Plugins                  as GHC hiding (Auto)
+import GHC.Types.Name.Occurrence    as Name
 
 
 ----------------------------------------
@@ -81,7 +81,7 @@ annotateDo flags ann_fun = \case
   L l (HsDo  _ y (L z doStmts)) -> do
     message $ "+ annotating do expression at " ++ showPpr flags l
     doStmts' <- mapM (annotateStmt flags ann_fun) doStmts
-    return (L l (HsDo noExt y (L z doStmts')))
+    return (L l (HsDo noExtField y (L z doStmts')))
 
   -- otherwise, just return the match unchanged
   expr -> return expr
@@ -140,7 +140,7 @@ annotateInfix flags ann_fun ann_tok = \case
         message $ "+ annotating do expression at " ++ showPpr flags l
 
         doStmts' <- mapM (annotateStmt flags ann_fun) doStmts
-        let do' = L l (HsDo noExt y (L z doStmts'))
+        let do' = L l (HsDo noExtField y (L z doStmts'))
         let expr' = paren lhs & paren do'
 
         return expr'
@@ -159,7 +159,7 @@ annotateStmt
 annotateStmt flags ann_fun = \case
 
   -- bind statements where the lhs is a variable pattern
-  L l (BindStmt x pat@(L _ (VarPat _ (L _ bind))) body y z) -> do
+  L l (BindStmt x pat@(L _ (VarPat _ (L _ bind))) body) -> do
 
     let body' =
           var ann_fun
@@ -170,10 +170,10 @@ annotateStmt flags ann_fun = \case
                    & paren (mkLocExpr l))
 
     message $ "  * found single bind ("++ render bind ++ ") at " ++ render l
-    return (L l (BindStmt x pat body' y z))
+    return (L l (BindStmt x pat body'))
 
   -- bind statements where the lhs is a single type constructor
-  L l (BindStmt x pat@(L _ (ConPatIn (L _ _) argP)) body y z) ->
+  L l (BindStmt x pat@(L _ (ConPat _ _ argP)) body) ->
     case hsConPatArgs argP of
       [p] -> do
         let body' =
@@ -185,14 +185,14 @@ annotateStmt flags ann_fun = \case
                       & paren (mkLocExpr l))
 
         message $ "  * found constructor bind ("++ render pat ++ ") at " ++ render l
-        return (L l (BindStmt x pat body' y z))
+        return (L l (BindStmt x pat body'))
 
       _ -> do
         message $ "  * skipping constructor bind ("++ render pat ++ ") at " ++ render l
-        return (L l (BindStmt x pat body y z))
+        return (L l (BindStmt x pat body))
 
   -- bind statements where the lhs is a tuple pattern
-  L l (BindStmt x pat@(L _ (TuplePat _ binds _)) body y z)
+  L l (BindStmt x pat@(L _ (TuplePat _ binds _)) body)
     | length binds > 1 && length binds <= 5 && all isVarPat binds -> do
 
         let bindStrs = varPatToLitStr flags <$> binds
@@ -202,7 +202,7 @@ annotateStmt flags ann_fun = \case
               & paren body
 
         message $ "  * found tuple bind ("++ render pat ++ ") at " ++ render l
-        return (L l (BindStmt x pat body' y z))
+        return (L l (BindStmt x pat body'))
 
   -- body statements
   L l (BodyStmt x body y z) -> do
@@ -262,7 +262,7 @@ mkRdrName = mkUnqual Name.varName . mkFastString
 mkLocExpr :: SrcSpan -> LHsExpr GhcPs
 mkLocExpr (UnhelpfulSpan {}) =
   var __Nothing__
-mkLocExpr (RealSrcSpan loc) =
+mkLocExpr (RealSrcSpan loc _) =
   paren (var __Just__ &
          tuple [ strLit (srcSpanFile loc)
                , numLit (srcSpanStartLine loc)
@@ -316,26 +316,26 @@ extractAnn _                = error "this should not happen"
 -- | Located expressions builder interface
 
 app :: LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
-app x y = noLoc (HsApp noExt x y)
+app x y = noLoc (HsApp noExtField x y)
 
 (&) :: LHsExpr GhcPs -> LHsExpr GhcPs -> LHsExpr GhcPs
 (&) = app
 infixl 4 &
 
 paren :: LHsExpr GhcPs -> LHsExpr GhcPs
-paren x = noLoc (HsPar noExt x)
+paren x = noLoc (HsPar noExtField x)
 
 var :: RdrName -> LHsExpr GhcPs
-var x = noLoc (HsVar noExt (noLoc x))
+var x = noLoc (HsVar noExtField (noLoc x))
 
 numLit :: Int -> LHsExpr GhcPs
-numLit n = noLoc (HsLit noExt (HsInt noExt (mkIntegralLit n)))
+numLit n = noLoc (HsLit noExtField (HsInt noExtField (mkIntegralLit n)))
 
 strLit :: FastString -> LHsExpr GhcPs
-strLit s = noLoc (HsLit noExt (HsString NoSourceText s))
+strLit s = noLoc (HsLit noExtField (HsString NoSourceText s))
 
 tuple :: [LHsExpr GhcPs] -> LHsExpr GhcPs
-tuple exprs = noLoc (ExplicitTuple noExt (noLoc . Present noExt <$> exprs) Boxed)
+tuple exprs = noLoc (ExplicitTuple noExtField (noLoc . Present noExtField <$> exprs) Boxed)
 
 
 ----------------------------------------
