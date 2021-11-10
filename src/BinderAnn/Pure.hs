@@ -5,7 +5,7 @@ module BinderAnn.Pure
   , plugin
   ) where
 
-import GhcPlugins as GHC
+import GHC.Plugins as GHC
 
 import BinderAnn.Common
 import BinderAnn.SrcInfo

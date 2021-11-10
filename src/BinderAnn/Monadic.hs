@@ -5,7 +5,7 @@ module BinderAnn.Monadic
   , plugin
   ) where
 
-import GhcPlugins as GHC
+import GHC.Plugins as GHC
 
 import BinderAnn.Common
 import BinderAnn.SrcInfo
